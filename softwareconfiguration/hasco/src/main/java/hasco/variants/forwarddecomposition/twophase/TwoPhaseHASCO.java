@@ -4,11 +4,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Random;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -40,6 +42,7 @@ import jaicore.basic.sets.SetUtil;
 import jaicore.concurrent.TimeoutTimer;
 import jaicore.concurrent.TimeoutTimer.TimeoutSubmitter;
 import jaicore.logging.LoggerUtil;
+import jaicore.logging.ToJSONStringUtil;
 import jaicore.search.core.interfaces.GraphGenerator;
 import jaicore.search.probleminputs.GraphSearchInput;
 
@@ -61,6 +64,17 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 	private int secondsSpentInPhase1;
 
 	private Thread timeoutControl = null;
+
+	@Override
+	public String toString() {
+		Map<String, Object> fields = new HashMap<>();
+		fields.put("hasco", this.hasco);
+		fields.put("phase1ResultQueue", this.phase1ResultQueue);
+		fields.put("selectedHASCOSolution", this.selectedHASCOSolution);
+		fields.put("timeOfStart", this.timeOfStart);
+		fields.put("secondsSpentInPhase1", this.secondsSpentInPhase1);
+		return ToJSONStringUtil.toJSONString(fields);
+	}
 
 	public TwoPhaseHASCO(final TwoPhaseSoftwareConfigurationProblem problem, final TwoPhaseHASCOConfig config) {
 		super(config != null ? config : ConfigFactory.create(TwoPhaseHASCOConfig.class), problem);
@@ -141,21 +155,24 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 						}
 					}
 				} catch (Exception e) {
-					TwoPhaseHASCO.this.logger.error("Timeouter died away. This must NEVER happen. The exception responsible for this is: \n\t{}", Arrays.asList(e.getStackTrace()).stream().map(StackTraceElement::toString).collect(Collectors.joining("\n\t")));
+					TwoPhaseHASCO.this.logger.error("Timeouter died away. This must NEVER happen. The exception responsible for this is: {} ({}). Stack trace: \n\t{}", e.getClass().getName(), e.getMessage(),
+							Arrays.asList(e.getStackTrace()).stream().map(StackTraceElement::toString).collect(Collectors.joining("\n\t")));
 				}
 			}, "Phase 1 time bound observer");
 			this.timeoutControl.start();
 			this.logger.info("Entering phase 1. Calling HASCO with timeout {}.", this.hasco.getTimeout());
 			try {
 				this.hasco.call();
-			} catch (AlgorithmExecutionCanceledException e) {
+			}
+			catch (AlgorithmExecutionCanceledException e) {
 				this.logger.info("HASCO has terminated due to a cancel.");
 			}
 			this.secondsSpentInPhase1 = (int) Math.round(System.currentTimeMillis() - this.timeOfStart / 1000.0);
 
+			/* if there is no candidate, and the remaining time is very small, throw an AlgorithmTimeoutedException */
 			this.logger.info("HASCO has finished. {} solutions were found.", this.phase1ResultQueue.size());
-			if (this.phase1ResultQueue.isEmpty()) {
-				throw new NoSuchElementException("No classifier could be built within the given timeout.");
+			if (this.phase1ResultQueue.isEmpty() && this.getRemainingTimeToDeadline().seconds() < 10) {
+				throw new AlgorithmTimeoutedException(this.getRemainingTimeToDeadline().milliseconds() * -1);
 			}
 
 			/* phase 2: select model */
@@ -332,6 +349,7 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 		ensembleToSelectFrom.forEach(c -> stats.add(Double.MAX_VALUE));
 
 		int n = ensembleToSelectFrom.size();
+		AtomicInteger evaluatedModels = new AtomicInteger();
 		for (int i = 0; i < n; i++) {
 			HASCOSolutionCandidate<Double> c = ensembleToSelectFrom.get(i);
 
@@ -358,7 +376,7 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 
 				/* Schedule a timeout for this evaluation, which is 10% over the estimated time */
 				int timeoutForEvaluation = (int) (estimatedInSelectionSingleIterationEvaluationTime * (1 + TwoPhaseHASCO.this.getConfig().selectionPhaseTimeoutTolerance()));
-				int taskId = ts.interruptMeAfterMS(timeoutForEvaluation);
+				TimerTask timerTask = ts.interruptMeAfterMS(timeoutForEvaluation, "Timeout for evaluation of ensemble candidate " + c.getComponentInstance());
 
 				/* If we have a global timeout, check whether considering this model is feasible. */
 				if (TwoPhaseHASCO.this.getTimeout().seconds() > 0) {
@@ -373,29 +391,31 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 				}
 				try {
 					double selectionScore = evaluator.evaluate(c.getComponentInstance());
+					evaluatedModels.incrementAndGet();
 					long trueEvaluationTime = (System.currentTimeMillis() - timestampStart);
 					TwoPhaseHASCO.this.logger.info("Evaluated candidate {} with score {} (score assigned by HASCO was {}). Time to evaluate was {}ms", c.getComponentInstance(), selectionScore, c.getScore(), trueEvaluationTime);
 					stats.set(run, selectionScore);
 				} catch (InterruptedException e) {
+					assert !Thread.currentThread().isInterrupted() : "The interrupted-flag should not be true when an InterruptedException is thrown!";
 					TwoPhaseHASCO.this.logger.info("Selection eval of {} got interrupted after {}ms. Defined timeout was: {}ms", c.getComponentInstance(), (System.currentTimeMillis() - timestampStart), timeoutForEvaluation);
-					Thread.currentThread().interrupt();
+					Thread.currentThread().interrupt(); // no controlled interrupt needed here, because this is only a re-interrupt, and the execution will cease after this anyway
 				} catch (Exception e) {
 					TwoPhaseHASCO.this.logger.error("Observed an exeption when trying to evaluate a candidate in the selection phase.\n{}", LoggerUtil.getExceptionInfo(e));
 				} finally {
 					sem.release();
 					TwoPhaseHASCO.this.logger.debug("Released. Sem state: {}", sem.availablePermits());
-					if (taskId >= 0) {
-						ts.cancelTimeout(taskId);
+					if (timerTask != null) {
+						timerTask.cancel();
 					}
 				}
 			});
 		}
 
 		/* now wait for results */
-		this.logger.info("Waiting for termination of {} threads that compute the selection scores.", n);
+		this.logger.info("Waiting for termination of {} computations running on {} threads.", n, this.getConfig().cpus());
 		sem.acquire(n);
 		long endOfPhase2 = System.currentTimeMillis();
-		this.logger.info("Finished phase 2 within {}ms net. Total runtime was {}ms. ", endOfPhase2 - startOfPhase2, endOfPhase2 - this.timeOfStart);
+		this.logger.info("Finished phase 2 within {}ms net. Total runtime was {}ms. Evaluated solutions {}/{}", endOfPhase2 - startOfPhase2, endOfPhase2 - this.timeOfStart, evaluatedModels.get(), n);
 		this.logger.debug("Shutting down thread pool");
 		pool.shutdownNow();
 		pool.awaitTermination(5, TimeUnit.SECONDS);
@@ -403,7 +423,6 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 		if (!pool.isShutdown()) {
 			this.logger.warn("Thread pool is not shut down yet!");
 		}
-
 		ts.close();
 
 		/* set chosen model */
@@ -411,11 +430,14 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 			this.logger.warn("No solution contained in ensemble.");
 		} else {
 			int selectedModelIndex = this.getCandidateThatWouldCurrentlyBeSelectedWithinPhase2(ensembleToSelectFrom, stats);
-			if (selectedModelIndex < 0) {
-				throw new NoSuchElementException("Could not identify any solution.");
+			if (selectedModelIndex >= 0) {
+				selectedModel = ensembleToSelectFrom.get(selectedModelIndex);
+				this.logger.info("Selected a configuration: {}. Its internal score was {}. Selection score was {}", selectedModel.getComponentInstance(), selectedModel.getScore(), stats.get(selectedModelIndex));
 			}
-			selectedModel = ensembleToSelectFrom.get(selectedModelIndex);
-			this.logger.info("Selected a configuration: {}. Its internal score was {}. Selection score was {}", selectedModel.getComponentInstance(), selectedModel.getScore(), stats.get(selectedModelIndex));
+			else {
+				this.logger.warn("Could not select any real solution in selection phase, just returning the best we have seen in HASCO.");
+				return bestSolution;
+			}
 		}
 		return selectedModel;
 	}
@@ -439,8 +461,14 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 
 	@Override
 	public void cancel() {
+		this.logger.info("Received cancel signal.");
 		super.cancel();
-		this.timeoutControl.interrupt();
+		this.logger.debug("Cancelling HASCO");
+		if (this.hasco != null) {
+			this.hasco.cancel();
+		}
+		this.timeoutControl.interrupt(); // no controlled interrupt necessary, because there is no controlled interruption handling in the body of the timeoutControl
+		assert this.isCanceled() : "Cancel-flag is not true at the end of the cancel procedure!";
 	}
 
 	/**

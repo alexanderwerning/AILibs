@@ -1,12 +1,13 @@
 package jaicore.search.algorithms.standard.bestfirst.nodeevaluation;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.Set;
@@ -16,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +26,14 @@ import org.slf4j.LoggerFactory;
 import com.google.common.eventbus.Subscribe;
 
 import jaicore.basic.ILoggingCustomizable;
+import jaicore.basic.IObjectEvaluator;
 import jaicore.basic.TimeOut;
 import jaicore.basic.algorithm.AlgorithmExecutionCanceledException;
 import jaicore.basic.algorithm.events.AlgorithmEvent;
 import jaicore.basic.algorithm.events.AlgorithmInitializedEvent;
 import jaicore.basic.sets.SetUtil.Pair;
 import jaicore.concurrent.TimeoutTimer;
+import jaicore.interrupt.Interrupter;
 import jaicore.logging.LoggerUtil;
 import jaicore.logging.ToJSONStringUtil;
 import jaicore.search.algorithms.standard.bestfirst.events.EvaluatedSearchSolutionCandidateFoundEvent;
@@ -42,16 +45,16 @@ import jaicore.search.algorithms.standard.gbf.SolutionEventBus;
 import jaicore.search.algorithms.standard.random.RandomSearch;
 import jaicore.search.algorithms.standard.uncertainty.IUncertaintySource;
 import jaicore.search.core.interfaces.GraphGenerator;
-import jaicore.search.core.interfaces.ISolutionEvaluator;
 import jaicore.search.model.other.EvaluatedSearchGraphPath;
 import jaicore.search.model.other.SearchGraphPath;
 import jaicore.search.model.travesaltree.Node;
 import jaicore.search.probleminputs.GraphSearchWithSubpathEvaluationsInput;
 
-public class RandomCompletionBasedNodeEvaluator<T, V extends Comparable<V>> extends TimeAwareNodeEvaluator<T, V>
+public class RandomCompletionBasedNodeEvaluator<T, A, V extends Comparable<V>> extends TimeAwareNodeEvaluator<T, V>
 implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionReportingNodeEvaluator<T, V>, ICancelableNodeEvaluator, IUncertaintyAnnotatingNodeEvaluator<T, V>, ILoggingCustomizable {
 
 	private static final String ALGORITHM_ID = "RandomCompletion";
+	private static final boolean LOG_FAILURES_AS_ERRORS = false;
 
 	private String loggerName;
 	private Logger logger = LoggerFactory.getLogger(RandomCompletionBasedNodeEvaluator.class);
@@ -78,27 +81,28 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 
 	/* sub-tools for conducting and analyzing random completions */
 	private Timer timeoutTimer;
-	private Collection<TimerTask> activeTasks = new ArrayList<>();
+	private Map<Node<T, ?>, TimerTask> activeTasks = new ConcurrentHashMap<>();
 
 	private RandomSearch<T, ?> completer;
 	private final Semaphore completerInsertionSemaphore = new Semaphore(0); // this is required since the step-method of
 	// the completer is asynchronous
-	protected final ISolutionEvaluator<T, ?, V> solutionEvaluator;
+	protected final IObjectEvaluator<SearchGraphPath<T, A>, V> solutionEvaluator;
 	protected IUncertaintySource<T, V> uncertaintySource;
 	protected SolutionEventBus<T> eventBus = new SolutionEventBus<>();
 	private final Map<List<T>, V> bestKnownScoreUnderNodeInCompleterGraph = new HashMap<>();
 	private boolean visualizeSubSearch;
 
-	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final ISolutionEvaluator<T, ?, V> solutionEvaluator) {
+	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final IObjectEvaluator<SearchGraphPath<T, A>, V> solutionEvaluator) {
 		this(random, samples, solutionEvaluator, -1, -1);
 	}
 
-	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final ISolutionEvaluator<T, ?, V> solutionEvaluator, final int timeoutForSingleCompletionEvaluationInMS, final int timeoutForNodeEvaluationInMS) {
+	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final IObjectEvaluator<SearchGraphPath<T, A>, V> solutionEvaluator, final int timeoutForSingleCompletionEvaluationInMS,
+			final int timeoutForNodeEvaluationInMS) {
 		this(random, samples, solutionEvaluator, timeoutForSingleCompletionEvaluationInMS, timeoutForNodeEvaluationInMS, null);
 	}
 
-	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final ISolutionEvaluator<T, ?, V> solutionEvaluator, final int timeoutForSingleCompletionEvaluationInMS, final int timeoutForNodeEvaluationInMS,
-			final Predicate<T> priorityPredicateForRDFS) {
+	public RandomCompletionBasedNodeEvaluator(final Random random, final int samples, final IObjectEvaluator<SearchGraphPath<T, A>, V> solutionEvaluator, final int timeoutForSingleCompletionEvaluationInMS,
+			final int timeoutForNodeEvaluationInMS, final Predicate<T> priorityPredicateForRDFS) {
 		super(timeoutForNodeEvaluationInMS);
 		if (random == null) {
 			throw new IllegalArgumentException("Random source must not be null!");
@@ -138,8 +142,8 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 	protected V fTimeouted(final Node<T, ?> n, final int timeout) throws InterruptedException, NodeEvaluationException {
 		assert this.generator != null : "Cannot compute f as no generator has been set!";
 		this.eventBus.post(new NodeAnnotationEvent<>(ALGORITHM_ID, n.getPoint(), "f-computing thread", Thread.currentThread().getName()));
-		this.logger.info("Received request for f-value of node {}. Number of subsamples will be {}, timeout for node evaluation is {}ms and for a single candidate is {}ms.", n, this.samples, this.getTimeoutForNodeEvaluationInMS(),
-				this.timeoutForSingleCompletionEvaluationInMS);
+		this.logger.info("Received request for f-value of node with hashCode {}. Number of subsamples will be {}, timeout for node evaluation is {}ms and for a single candidate is {}ms. Node details: {}", n.hashCode(), this.samples,
+				this.getTimeoutForNodeEvaluationInMS(), this.timeoutForSingleCompletionEvaluationInMS, n);
 		long startOfComputation = System.currentTimeMillis();
 		long deadline = timeout > 0 ? startOfComputation + timeout : -1;
 		if (this.timestampOfFirstEvaluation == 0) {
@@ -162,16 +166,19 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 			double uncertainty = 0.0;
 			if (!n.isGoal()) {
 
-				/* if there was no relevant change in comparison to parent, apply parent's f */
-				if (path.size() > 1 && !this.solutionEvaluator.doesLastActionAffectScoreOfAnySubsequentSolution(new SearchGraphPath<>(path))) {
-					assert this.fValues.containsKey(n.getParent()) : "The solution evaluator tells that the solution on the path has not significantly changed, but no f-value has been stored before for the parent. The path is: " + path;
-					V score = this.fValues.get(n.getParent());
-					this.fValues.put(n, score);
-					this.logger.debug("Score {} of parent can be used since the last action did not affect the performance.", score);
-					if (score == null) {
-						this.logger.warn("Returning score NULL inherited from parent, this should not happen.");
+				/* if the node has no sibling (parent has no other child than this node), apply parent's f. This only works if the parent is already part of the explored graph, which is not necessarily the case */
+				if (n.getParent() != null && this.completer.getExploredGraph().hasItem(n.getParent().getPoint())) {
+					boolean nodeHasSibling = this.completer.getExploredGraph().getSuccessors(n.getParent().getPoint()).size() > 1;
+					if (path.size() > 1 && !nodeHasSibling) {
+						assert this.fValues.containsKey(n.getParent()) : "The solution evaluator tells that the solution on the path has not significantly changed, but no f-value has been stored before for the parent. The path is: " + path;
+						V score = this.fValues.get(n.getParent());
+						this.fValues.put(n, score);
+						this.logger.debug("Score {} of parent can be used since the last action did not affect the performance.", score);
+						if (score == null) {
+							this.logger.warn("Returning score NULL inherited from parent, this should not happen.");
+						}
+						return score;
 					}
-					return score;
 				}
 
 				/*
@@ -194,6 +201,9 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 				this.logger.debug("Now drawing {} successful examples but no more than {}", this.samples, maxSamples);
 				while (successfulSamples < this.samples) {
 					this.logger.debug("Drawing next sample. {} samples have been drawn already, {} have been successful.", drawnSamples, successfulSamples);
+					if (this.activeTasks.containsKey(n)) {
+						throw new IllegalStateException("There must be no active timer job for the considered node at the beginning of a sampling loop.");
+					}
 					this.checkInterruption();
 					if (deadline > 0 && deadline < System.currentTimeMillis()) {
 						this.logger.info("Deadline for random completions hit! Finishing node evaluation.");
@@ -249,19 +259,20 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 
 					/* setup timeout timer to interrupt evaluation */
 					TimerTask abortionTask = null;
-					AtomicBoolean nodeEvaluationTimedOut = new AtomicBoolean(false);
+					String interruptReason = "RCNE-timeout";
 					if (timeoutForJob >= 0) {
 						Thread executingThread = Thread.currentThread();
 						abortionTask = new TimerTask() {
 							@Override
 							public void run() {
-								RandomCompletionBasedNodeEvaluator.this.activeTasks.remove(this);
+								RandomCompletionBasedNodeEvaluator.this.activeTasks.remove(n);
 
 								/* if the executing thread has not been interrupted from outside */
 								if (!executingThread.isInterrupted()) {
-									RandomCompletionBasedNodeEvaluator.this.logger.info("Sending an controlled interrupt to the evaluating thread to get it back here.");
-									nodeEvaluationTimedOut.set(true);
-									executingThread.interrupt();
+									RandomCompletionBasedNodeEvaluator.this.logger.info(
+											"Sending a controlled interrupt with interrupt reason {} to the evaluating thread {}. The node whose evaluation triggered the creation of this timeout job has hash code {}. More detailed node representation: {}",
+											interruptReason, executingThread, n.hashCode(), n);
+									Interrupter.get().interruptThread(executingThread, interruptReason);
 								}
 							}
 						};
@@ -269,7 +280,7 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 							this.timeoutTimer = TimeoutTimer.getInstance();
 						}
 						this.timeoutTimer.schedule(abortionTask, timeoutForJob);
-						this.activeTasks.add(abortionTask);
+						this.activeTasks.put(n, abortionTask);
 						this.logger.debug("Activated timeout of {}ms for evaluation of found solution.", timeoutForJob);
 					} else {
 						this.logger.debug("No timeout active for candidate evaluation.");
@@ -279,6 +290,7 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 					drawnSamples++;
 					try {
 						V val = this.getFValueOfSolutionPath(completedPath);
+						this.logger.debug("Completed path evaluation. Score is {}", val);
 						successfulSamples++;
 						this.eventBus.post(new RolloutEvent<>(ALGORITHM_ID, n.path(), val));
 						if (val != null) {
@@ -288,14 +300,18 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 							this.logger.warn("Got NULL result as score for path {}", completedPath);
 						}
 					} catch (InterruptedException e) {
-						boolean intentionalInterrupt = nodeEvaluationTimedOut.get();
+						assert !Thread.currentThread().isInterrupted() : "The interrupt-flag should not be true when an InterruptedException is thrown! Stack trace of the InterruptedException is \n\t"
+								+ Arrays.asList(e.getStackTrace()).stream().map(StackTraceElement::toString).collect(Collectors.joining("\n\t"));
+						boolean intentionalInterrupt = Interrupter.get().hasCurrentThreadBeenInterruptedWithReason(interruptReason);
 						this.logger.info("Recognized {} interrupt", intentionalInterrupt ? "intentional" : "external");
 						if (!intentionalInterrupt) {
 							if (abortionTask != null) {
 								abortionTask.cancel();
+								super.cancelActiveTasks();
 							}
 							throw e;
 						} else {
+							Interrupter.get().markInterruptOnCurrentThreadAsResolved(interruptReason);
 							Thread.interrupted(); // set interrupted to false
 						}
 					} catch (Exception ex) {
@@ -304,11 +320,19 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 							throw new NodeEvaluationException(ex, "Error in the evaluation of a node!");
 						} else {
 							countedExceptions++;
-							this.logger.error("Could not evaluate solution candidate ... retry another completion. {}", LoggerUtil.getExceptionInfo(ex));
+							if (LOG_FAILURES_AS_ERRORS) {
+								this.logger.error("Could not evaluate solution candidate ... retry another completion. {}", LoggerUtil.getExceptionInfo(ex));
+							} else {
+								this.logger.debug("Could not evaluate solution candidate ... retry another completion. {}", LoggerUtil.getExceptionInfo(ex));
+							}
 						}
-					}
-					if (abortionTask != null) {
-						abortionTask.cancel();
+					} finally { // make sure that the abortion task is definitely killed
+						this.logger.debug("Finished process for sample {}. Canceling its abortion task.", drawnSamples);
+						if (abortionTask != null) {
+							abortionTask.cancel();
+							this.activeTasks.remove(n);
+							super.cancelActiveTasks();
+						}
 					}
 				}
 
@@ -328,6 +352,7 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 				}
 
 				/* if we are still interrupted, throw an exception */
+				this.logger.debug("Checking interruption.");
 				this.checkInterruption();
 
 				/* add number of samples to node */
@@ -365,6 +390,7 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 	private void updateMapOfBestScoreFoundSoFar(final List<T> nodeInCompleterGraph, final V scoreOnOriginalBenchmark) {
 		V bestKnownScore = this.bestKnownScoreUnderNodeInCompleterGraph.get(nodeInCompleterGraph);
 		if (bestKnownScore == null || scoreOnOriginalBenchmark.compareTo(bestKnownScore) < 0) {
+			this.logger.debug("Score {} is better than previously observed best score {} under path {}", scoreOnOriginalBenchmark, bestKnownScore, nodeInCompleterGraph);
 			this.bestKnownScoreUnderNodeInCompleterGraph.put(nodeInCompleterGraph, scoreOnOriginalBenchmark);
 			if (nodeInCompleterGraph.size() > 1) {
 				this.updateMapOfBestScoreFoundSoFar(nodeInCompleterGraph.subList(0, nodeInCompleterGraph.size() - 1), scoreOnOriginalBenchmark);
@@ -386,9 +412,9 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 			long start = System.currentTimeMillis();
 			V val = null;
 			try {
-				val = this.solutionEvaluator.evaluateSolution(new SearchGraphPath<>(path));
+				val = this.solutionEvaluator.evaluate(new SearchGraphPath<>(path));
 			} catch (InterruptedException e) {
-				this.logger.info("Received interrupt during computation of f-value of {}.", path);
+				this.logger.info("Received interrupt during computation of f-value.");
 				throw e;
 			} catch (Exception e) {
 				this.unsuccessfulPaths.add(path);
@@ -487,11 +513,15 @@ implements IPotentiallyGraphDependentNodeEvaluator<T, V>, IPotentiallySolutionRe
 	}
 
 	@Override
-	public void cancel() {
-		this.logger.info("Receive cancel signal.");
+	public void cancelActiveTasks() {
+		this.logger.info("Receive cancel signal. Canceling myself (aborting all timers) and canceling the completer.");
+		super.cancelActiveTasks();
 		this.completer.cancel();
 		if (!this.activeTasks.isEmpty()) {
-			this.activeTasks.forEach(TimerTask::cancel);
+			for (Entry<Node<T, ?>, TimerTask> entry : new HashSet<>(this.activeTasks.entrySet())) {
+				entry.getValue().cancel();
+				this.activeTasks.remove(entry.getKey());
+			}
 		}
 	}
 

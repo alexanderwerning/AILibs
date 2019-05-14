@@ -166,7 +166,7 @@ def parse_args():
     parser.add_argument('--testarff', required=False, help="Path or ARFF to use for testing when running with traintest mode.")
     parser.add_argument('--output', required=True, help="In train mode set the file where the model shall be dumped; in test mode set the file where the prediction results shall be serialized to.")
     parser.add_argument('--model', help="Path to the trained model (in .pcl format) that shall be used for testing.")
-    parser.add_argument('--problem', choices=['classification', 'regression', 'clustering'], required=True, help="Select the problem to solve, classification, regression or clustering.")
+    parser.add_argument('--problem', choices=['classification, regression, clustering'], required=True, help="Select the problem to solve, classification, regression or clustering.")
     parser.add_argument('--targets', nargs='*', type=int, help="Declare which of the columns of the ARFF to use as targets. Default is only the last column.")
     sys.argv = vars(parser.parse_args())
 
@@ -175,7 +175,6 @@ def load_arff_file(arff_path):
     Loads an arff file from disk.
     Returns content.
     """
-    
     # Load the arff dataset and convert the data into array.
     if sys.argv["problem"] == "regression" or sys.argv["problem"] == "clustering":
         data, meta = scipy_arff.loadarff(arff_path)
@@ -331,7 +330,6 @@ def run_test_mode(data):
 def main():
     print("load arff file from ", sys.argv["arff"])
     data = load_arff_file(sys.argv["arff"])
-    
     print("run script in mode ", sys.argv["mode"])
     if sys.argv["mode"] == "train":
         run_train_mode(data)

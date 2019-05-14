@@ -78,7 +78,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 
 	/* The type of problem that is to be solved by the ScikitLearn classifier. */
 	public enum ProblemType {
-		REGRESSION, CLASSIFICATION;
+		REGRESSION, CLASSIFICATION, CLUSTERING;
 	}
 
 	/* Problem definition fields */
@@ -421,7 +421,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 		private static final String MODE_FLAG = "--mode";
 		private static final String MODEL_FLAG = "--model";
 		private static final String OUTPUT_FLAG = "--output";
-		private static final String REGRESSION_FLAG = "--regression";
+		private static final String PROBLEM_FLAG = "--problem";
 
 		private String arffFile;
 		private String testArffFile;
@@ -500,9 +500,8 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 			}
 			processParameters.addAll(Arrays.asList(OUTPUT_FLAG, this.outputFile));
 
-			if (ScikitLearnWrapper.this.problemType == ScikitLearnWrapper.ProblemType.REGRESSION) {
-				processParameters.add(REGRESSION_FLAG);
-			}
+			processParameters.add(PROBLEM_FLAG);
+			processParameters.add(ScikitLearnWrapper.this.problemType.name().toLowerCase());
 
 			if (this.mode == WrapperExecutionMode.TEST) {
 				Objects.requireNonNull(this.modelFile);

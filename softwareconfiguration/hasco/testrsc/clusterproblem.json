@@ -1,0 +1,74 @@
+{
+  "repository" : "ClusterProblem",
+  "components" : [ {
+    "name" : "KMeans",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "IClusterAlgorithm" ],
+    "parameter" : [ {
+      "name" : "k",
+      "type" : "int",
+      "default" : "1.0",
+      "min" : 1.0,
+      "max" : 20.0,
+      "refineSplits" : 8,
+      "minInterval" : 1
+    } ],
+    "dependencies" : [ ]
+  }, {
+    "name" : "DBSCAN",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "IClusterAlgorithm" ],
+    "parameter" : [  {
+      "name" : "epsilon",
+      "type" : "double",
+      "default" : 1.0E-7,
+      "min" : 1.0E-12,
+      "max" : 10.0,
+      "refineSplits" : 8,
+      "minInterval" : 10
+    }, {
+      "name" : "minPoints",
+      "type" : "int",
+      "default" : 1.0,
+      "min" : 1.0,
+      "max" : 100.0,
+      "refineSplits" : 8,
+      "minInterval" : 0.1
+    } ],
+    "dependencies" : [  ]
+  }, {
+    "name" : "MeanShift",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "IClusterAlgorithm" ],
+    "parameter" : [  {
+      "name" : "bandwidth",
+      "type" : "double",
+      "default" : 1.0E-7,
+      "min" : 1.0E-12,
+      "max" : 10.0,
+      "refineSplits" : 8,
+      "minInterval" : 0.1
+    }],
+    "dependencies" : [  ]
+  }, {
+    "name" : "AgglomerativeClustering",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "IClusterAlgorithm" ],
+    "parameter" : [  {
+      "name" : "k",
+      "type" : "int",
+      "default" : "1.0",
+      "min" : 1.0,
+      "max" : 20.0,
+      "refineSplits" : 8,
+      "minInterval" : 1
+    }, {
+      "name" : "linkageType",
+      "type" : "cat",
+      "default" : "complete",
+      "values" : [ "single", "complete","average"]
+    } ],
+    "dependencies" : [  ]
+  }
+  ]
+}

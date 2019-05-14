@@ -167,7 +167,7 @@ def parse_args():
     parser.add_argument('--testarff', required=False, help="Path or ARFF to use for testing when running with traintest mode.")
     parser.add_argument('--output', required=True, help="In train mode set the file where the model shall be dumped; in test mode set the file where the prediction results shall be serialized to.")
     parser.add_argument('--model', help="Path to the trained model (in .pcl format) that shall be used for testing.")
-    parser.add_argument('--regression', action='store_true', help="If set, the data is assumed to be a regression problem instead of a categorical one.")
+    parser.add_argument('--problem', choices=['classification, regression, clustering'], required=True, help="Select the problem to solve, classification, regression or clustering.")
     parser.add_argument('--targets', nargs='*', type=int, help="Declare which of the columns of the ARFF to use as targets. Default is only the last column.")
     sys.argv = vars(parser.parse_args())
 
@@ -177,7 +177,7 @@ def load_arff_file(arff_path):
     Returns content.
     """
     # Load the arff dataset and convert the data into array.
-    if sys.argv["regression"]:
+    if sys.argv["problem"] == "regression" or sys.argv["problem"] == "clustering":
         data, meta = scipy_arff.loadarff(arff_path)
         data = np.asarray(data.tolist(), dtype=np.float64)
         if len(data) <= 1:
@@ -220,7 +220,7 @@ def serialize_model(classifier_instance):
     Serialize trained model.
     Returns path to serialized model.
     """
-    # Safe model on disk.
+    # Save model on disk.
     print("dump model to file ", OUTPUT_FILE)
     with open(OUTPUT_FILE, 'wb') as file:
         pickle.dump(classifier_instance, file)
@@ -232,7 +232,7 @@ def serialize_prediction(prediction):
     """
     # Make sure the predictions are in a list
     prediction = prediction.tolist()
-    # Convert possible integers to floats (nescassary for Weka signature)
+    # Convert possible integers to floats (necessary for Weka signature)
     if isinstance(prediction[0],int):
         prediction = [float(i) for i in prediction]
     elif isinstance(prediction[0],list):
@@ -241,7 +241,7 @@ def serialize_prediction(prediction):
     if not isinstance(prediction[0],list):
         prediction = [prediction]
     prediction_json = json.dumps(prediction)
-    # Safe prediction on disk.
+    # Save prediction on disk.
     print("write prediction to file ", OUTPUT_FILE)
     with open(OUTPUT_FILE, 'w') as file:
         file.write(prediction_json)
@@ -254,8 +254,10 @@ def run_train_mode(data):
     the script was started with or those that were given to the template.
     Returns path to serialized model.
     """
-    if sys.argv["regression"]:
+    if sys.argv["problem"] == "regression":
         features, targets = get_feature_target_matrices(data)
+    elif sys.argv["problem"] == "clustering":
+    	features = np.array(data.input_matrix)
     else:
         features, targets = data.input_matrix, data.output_matrix
         y_train = []
@@ -267,7 +269,10 @@ def run_train_mode(data):
         features = np.array(features)
     # Create instance of classifier with given parameters.
     classifier_instance = {{classifier_construct}}
-    classifier_instance.fit(features, targets)
+    if sys.argv["clustering"]:
+        classifier_instance.fit(features)
+    else:
+        classifier_instance.fit(features, targets)
     serialize_model(classifier_instance)
 
 def run_train_test_mode(data, testdata):
@@ -277,8 +282,10 @@ def run_train_test_mode(data, testdata):
     the script was started with or those that were given to the template.
     Returns path to serialized model.
     """
-    if sys.argv["regression"]:
+    if sys.argv["problem"] == "regression":
         features, targets = get_feature_target_matrices(data)
+    elif sys.argv["problem"] == "clustering":
+    	features = np.array(data.input_matrix)
     else:
         features, targets = data.input_matrix, data.output_matrix
         y_train = []
@@ -292,8 +299,10 @@ def run_train_test_mode(data, testdata):
     classifier_instance = {{classifier_construct}}
     classifier_instance.fit(features, targets)
     
-    if sys.argv["regression"]:
+    if sys.argv["problem"] == "regression":
         test_features, test_targets = get_feature_target_matrices(testdata)
+    elif sys.argv["problem"] == "clustering":
+    	features = data.input_matrix
     else:
         test_features = testdata.input_matrix
     prediction = classifier_instance.predict(test_features)
@@ -306,8 +315,10 @@ def run_test_mode(data):
     """
     with open(sys.argv["model"], 'rb') as file:
         classifier_instance = pickle.load(file)
-    if sys.argv["regression"]:
+    if sys.argv["problem"] == "regression":
         features, targets = get_feature_target_matrices(data)
+    elif sys.argv["problem"] == "clustering":
+    	features = data.input_matrix
     else:
         features = data.input_matrix
     prediction = classifier_instance.predict(features)
@@ -331,6 +342,6 @@ def main():
 if __name__ == "__main__":
     parse_args()
     OUTPUT_FILE = sys.argv["output"]
-    if not sys.argv["regression"] and sys.argv["targets"] and len(sys.argv["targets"]) > 1:
+    if not (sys.argv["problem"] == "regression") and sys.argv["targets"] and len(sys.argv["targets"]) > 1:
         raise RuntimeError("Multiple targets are not supported for categorical problems.")
     main()

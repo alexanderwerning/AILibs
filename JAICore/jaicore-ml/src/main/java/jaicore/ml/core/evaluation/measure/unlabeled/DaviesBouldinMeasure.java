@@ -12,8 +12,8 @@ import weka.core.Instances;
 public class DaviesBouldinMeasure extends AInternalClusteringMeasure {
 // In the original paper this is formulated as a loss (minimized for best clustering)
 	@Override
-	public Double calculateMeasure(List<List<double[]>> clusters) {
-
+	public Double calculateMeasure(final Instances labels, final Instances data) {
+		List<List<double[]>> clusters = separateClusters(labels, data);
 		int N = clusters.size();
 		List<double[]> centroids = new LinkedList<>();
 		for (int i = 0; i < N; i++) {

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -278,12 +279,24 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 	 * @throws IOException The __init__.py couldn't be created in the given folder (which is necessary to declare it as a module).
 	 */
 	public static String createImportStatementFromImportFolder(final File importsFolder, final boolean keepNamespace) throws IOException {
-		if (importsFolder == null || !importsFolder.exists() || importsFolder.list().length == 0) {
+		if (importsFolder == null || !importsFolder.exists()) {
+			return "";
+		}
+		// remove hidden folders (names beginning with ".")
+		List<String> list = Arrays.asList(importsFolder.list());
+		List<String> files = new LinkedList<>();
+		for(int i = 0; i < list.size(); i++){
+			if(!list.get(i).startsWith(".")) {
+				files.add(list.get(i));
+			}
+		}
+		if(files.size() == 0) {
 			return "";
 		}
 		/* Make the folder a module. */
-		if (!Arrays.asList(importsFolder.list()).contains("__init__.py")) {
+		if (!files.contains("__init__.py")) {
 			File initFile = new File(importsFolder, "__init__.py");
+			files.add("__init__.py");
 			if (!initFile.createNewFile() && L.isDebugEnabled()) {
 				L.debug("Init file {} exists already", initFile.getAbsolutePath());
 			}
@@ -293,11 +306,11 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 		/* Add the folder to the environment of the python script */
 		result.append("\n");
 		result.append("sys.path.append(r'" + absoluteFolderPath + "')\n");
-		for (File module : importsFolder.listFiles()) {
-			if (!module.getName().startsWith("__")) {
+		for (String modulename : files) {
+			if (!modulename.startsWith("__")) {
 				/* Either import the module by its name. Then the classes of it have to be referenced by the fully qualified name. */
 				if (keepNamespace) {
-					result.append("import " + module.getName().substring(0, module.getName().length() - 3) + "\n");
+					result.append("import " + modulename.substring(0, modulename.length() - 3) + "\n");
 				}
 				/*
 				 * ... else all the content of the module is imported. Than they can be called
@@ -305,7 +318,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 				 * imported that overlap in class names.
 				 */
 				else {
-					result.append("from " + module.getName().substring(0, module.getName().length() - 3) + " import *\n");
+					result.append("from " + modulename.substring(0, modulename.length() - 3) + " import *\n");
 				}
 			}
 		}

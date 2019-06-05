@@ -50,7 +50,6 @@ def parse(arff_, is_path=True, dense_mode=True):
         if is_path:  # close file if necessary
             arff_data.close()
 
-
 class ArffStructure:
     """ Stores the arff data in a way it can be used by tensorflow.
     Args:
@@ -159,7 +158,7 @@ def get_filename(path_of_file):
 def parse_args():
     """
     Parses the arguments that are given to the script and overwrites sys.argv with this parsed representation that is
-    accessable as a list.
+    accessible as a list.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['train','test','traintest'], required=True, help="Selecting whether a train or a test is run.")
@@ -167,7 +166,7 @@ def parse_args():
     parser.add_argument('--testarff', required=False, help="Path or ARFF to use for testing when running with traintest mode.")
     parser.add_argument('--output', required=True, help="In train mode set the file where the model shall be dumped; in test mode set the file where the prediction results shall be serialized to.")
     parser.add_argument('--model', help="Path to the trained model (in .pcl format) that shall be used for testing.")
-    parser.add_argument('--problem', choices=['classification, regression, clustering'], required=True, help="Select the problem to solve, classification, regression or clustering.")
+    parser.add_argument('--problem', choices=['classification', 'regression', 'clustering'], required=True, help="Select the problem to solve, classification, regression or clustering.")
     parser.add_argument('--targets', nargs='*', type=int, help="Declare which of the columns of the ARFF to use as targets. Default is only the last column.")
     sys.argv = vars(parser.parse_args())
 
@@ -176,6 +175,7 @@ def load_arff_file(arff_path):
     Loads an arff file from disk.
     Returns content.
     """
+    
     # Load the arff dataset and convert the data into array.
     if sys.argv["problem"] == "regression" or sys.argv["problem"] == "clustering":
         data, meta = scipy_arff.loadarff(arff_path)
@@ -257,7 +257,7 @@ def run_train_mode(data):
     if sys.argv["problem"] == "regression":
         features, targets = get_feature_target_matrices(data)
     elif sys.argv["problem"] == "clustering":
-    	features = np.array(data.input_matrix)
+    	features = np.array(data)
     else:
         features, targets = data.input_matrix, data.output_matrix
         y_train = []
@@ -269,7 +269,7 @@ def run_train_mode(data):
         features = np.array(features)
     # Create instance of classifier with given parameters.
     classifier_instance = {{classifier_construct}}
-    if sys.argv["clustering"]:
+    if sys.argv["problem"] == "clustering":
         classifier_instance.fit(features)
     else:
         classifier_instance.fit(features, targets)
@@ -302,7 +302,7 @@ def run_train_test_mode(data, testdata):
     if sys.argv["problem"] == "regression":
         test_features, test_targets = get_feature_target_matrices(testdata)
     elif sys.argv["problem"] == "clustering":
-    	features = data.input_matrix
+    	test_features = data.input_matrix
     else:
         test_features = testdata.input_matrix
     prediction = classifier_instance.predict(test_features)
@@ -315,19 +315,23 @@ def run_test_mode(data):
     """
     with open(sys.argv["model"], 'rb') as file:
         classifier_instance = pickle.load(file)
-    if sys.argv["problem"] == "regression":
-        features, targets = get_feature_target_matrices(data)
-    elif sys.argv["problem"] == "clustering":
-    	features = data.input_matrix
+
+    if sys.argv["problem"] == "clustering":
+    	features = data
+    	prediction = classifier_instance.predict(features)
     else:
-        features = data.input_matrix
-    prediction = classifier_instance.predict(features)
+    	if sys.argv["problem"] == "regression":
+        	features, targets = get_feature_target_matrices(data)
+    	else:
+        	features = data.input_matrix
+    	prediction = classifier_instance.predict(features)
     serialize_prediction(prediction)
 
 
 def main():
     print("load arff file from ", sys.argv["arff"])
     data = load_arff_file(sys.argv["arff"])
+    
     print("run script in mode ", sys.argv["mode"])
     if sys.argv["mode"] == "train":
         run_train_mode(data)

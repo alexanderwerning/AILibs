@@ -1,0 +1,74 @@
+{
+  "repository" : "ClusterProblem",
+  "components" : [ {
+    "name" : "sklearn.cluster.KMeans",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "ClusteringAlgorithm" ],
+    "parameter" : [ {
+      "name" : "n_clusters",
+      "type" : "int",
+      "default" : "1.0",
+      "min" : 1.0,
+      "max" : 20.0,
+      "refineSplits" : 8,
+      "minInterval" : 1
+    } ],
+    "dependencies" : [ ]
+  }, {
+    "name" : "sklearn.cluster.DBSCAN",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "ClusteringAlgorithm" ],
+    "parameter" : [  {
+      "name" : "eps",
+      "type" : "double",
+      "default" : 1.0E-7,
+      "min" : 1.0E-12,
+      "max" : 10.0,
+      "refineSplits" : 8,
+      "minInterval" : 10
+    }, {
+      "name" : "min_samples",
+      "type" : "int",
+      "default" : 1.0,
+      "min" : 1.0,
+      "max" : 100.0,
+      "refineSplits" : 8,
+      "minInterval" : 0.1
+    } ],
+    "dependencies" : [  ]
+  }, {
+    "name" : "sklearn.cluster.MeanShift",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "ClusteringAlgorithm" ],
+    "parameter" : [  {
+      "name" : "bandwidth",
+      "type" : "double",
+      "default" : 1.0E-7,
+      "min" : 1.0E-12,
+      "max" : 10.0,
+      "refineSplits" : 8,
+      "minInterval" : 0.1
+    }],
+    "dependencies" : [  ]
+  }, {
+    "name" : "sklearn.cluster.AgglomerativeClustering",
+    "requiredInterface" : [ ],
+    "providedInterface" : [ "ClusteringAlgorithm" ],
+    "parameter" : [  {
+      "name" : "n_clusters",
+      "type" : "int",
+      "default" : "1.0",
+      "min" : 1.0,
+      "max" : 20.0,
+      "refineSplits" : 8,
+      "minInterval" : 1
+    }, {
+      "name" : "linkage",
+      "type" : "cat",
+      "default" : "complete",
+      "values" : [ "single", "ward", "complete","average"]
+    } ],
+    "dependencies" : [  ]
+  }
+  ]
+}

@@ -21,11 +21,11 @@ import jaicore.ml.evaluation.evaluators.weka.splitevaluation.SimpleSLCSplitBased
 import jaicore.ml.weka.dataset.splitter.IDatasetSplitter;
 import jaicore.ml.weka.dataset.splitter.MulticlassClassStratifiedSplitter;
 
-public class MLPlanSKLearnBuilder extends AbstractMLPlanSingleLabelBuilder {
+public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 
-	private Logger logger = LoggerFactory.getLogger(MLPlanSKLearnBuilder.class);
+	private Logger logger = LoggerFactory.getLogger(MLPlanSKLearnClusterBuilder.class);
 
-	private static final String PYTHON_REQUIRED_VERSION = "Python 3.6.*";
+	private static final String PYTHON_REQUIRED_VERSION = "Python 3.7.*";
 	private static final String[] PYTHON_REQUIRED_MODULES = { "numpy", "json", "pickle", "os", "sys", "warnings", "scipy.io.arff", "sklearn" };
 
 	private static final String COMMAND_PYTHON = "python";
@@ -34,14 +34,14 @@ public class MLPlanSKLearnBuilder extends AbstractMLPlanSingleLabelBuilder {
 	private static final String PYTHON_MODULE_NOT_FOUND_ERROR_MSG = "ModuleNotFoundError";
 
 	/* DEFAULT VALUES FOR THE SCIKIT-LEARN SETTING */
-	private static final String RES_SKLEARN_SEARCHSPACE_CONFIG = "automl/searchmodels/sklearn/sklearn-mlplan.json";
-	private static final String RES_SKLEARN_UL_SEARCHSPACE_CONFIG = "automl/searchmodels/sklearn/ml-plan-ul.json";
+	private static final String RES_SKLEARN_SEARCHSPACE_CONFIG = "automl/searchmodels/sklearn/sklearn-cluster-mlplan.json";
+	private static final String RES_SKLEARN_UL_SEARCHSPACE_CONFIG = RES_SKLEARN_SEARCHSPACE_CONFIG;//"automl/searchmodels/sklearn/ml-plan-ul.json";
 	private static final String FS_SEARCH_SPACE_CONFIG = "conf/mlplan-sklearn.json";
 
 	private static final String RES_SKLEARN_PREFERRED_COMPONENTS = "mlplan/sklearn-preferenceList.txt";
 	private static final String FS_SKLEARN_PREFERRED_COMPONENTS = "conf/sklearn-preferenceList.txt";
 
-	private static final String DEF_REQUESTED_HASCO_INTERFACE = "AbstractClassifier";
+	private static final String DEF_REQUESTED_HASCO_INTERFACE = "ClusteringAlgorithm";
 	private static final IDatasetSplitter DEF_SELECTION_HOLDOUT_SPLITTER = new MulticlassClassStratifiedSplitter();
 	private static final IClassifierFactory DEF_CLASSIFIER_FACTORY = new SKLearnClassifierFactory();
 	private static final File DEF_SEARCH_SPACE_CONFIG = FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG);
@@ -55,7 +55,7 @@ public class MLPlanSKLearnBuilder extends AbstractMLPlanSingleLabelBuilder {
 	 * Creates a new ML-Plan Builder for scikit-learn.
 	 * @throws IOException Thrown if configuration files cannot be read.
 	 */
-	public MLPlanSKLearnBuilder() throws IOException {
+	public MLPlanSKLearnClusterBuilder() throws IOException {
 		this(false);
 	}
 
@@ -65,7 +65,7 @@ public class MLPlanSKLearnBuilder extends AbstractMLPlanSingleLabelBuilder {
 	 * @param skipSetupCheck Flag whether to skip the system's setup check, which examines whether the operating system has python installed in the required version and all the required python modules are installed.
 	 * @throws IOException Thrown if configuration files cannot be read.
 	 */
-	public MLPlanSKLearnBuilder(final boolean skipSetupCheck) throws IOException {
+	public MLPlanSKLearnClusterBuilder(final boolean skipSetupCheck) throws IOException {
 		super();
 		if (!skipSetupCheck) {
 			this.checkPythonSetup();
@@ -85,70 +85,8 @@ public class MLPlanSKLearnBuilder extends AbstractMLPlanSingleLabelBuilder {
 	 * @return The builder object.
 	 * @throws IOException Thrown if the search space configuration file cannot be read.
 	 */
-	public MLPlanSKLearnBuilder withUnlimitedLengthPipelineSearchSpace() throws IOException {
-		return (MLPlanSKLearnBuilder) this.withSearchSpaceConfigFile(FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_UL_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG));
-	}
-
-	protected void checkPythonSetup() {
-		try {
-			/* Check whether we have python in the $PATH environment variable and whether the required python version is installed. */
-			Process p = new ProcessBuilder().command(COMMAND_PYTHON_VERSION).start();
-			StringBuilder sb = new StringBuilder();
-			try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-				String line;
-				while ((line = br.readLine()) != null) {
-					sb.append(line);
-				}
-			}
-			String versionString = sb.toString();
-			String regEx = PYTHON_REQUIRED_VERSION.replaceAll("\\.", "\\\\\\.").replaceAll("\\*", "[0-9]");
-			if (!versionString.matches(regEx)) {
-				throw new SystemRequirementsNotMetException("The installed python version does not match the required " + PYTHON_REQUIRED_VERSION);
-			}
-
-			/* Check whether we have all required python modules available*/
-			List<String> checkAllModulesAvailableCommand = new LinkedList<>(Arrays.asList(COMMAND_PYTHON_EXEC));
-			StringBuilder imports = new StringBuilder();
-			for (String module : PYTHON_REQUIRED_MODULES) {
-				if (!imports.toString().isEmpty()) {
-					imports.append(";");
-				}
-				imports.append("import " + module);
-			}
-			checkAllModulesAvailableCommand.add(imports.toString());
-			StringBuilder allModulesAvailableErrorSB = new StringBuilder();
-			Process allModulesCheckProcess = new ProcessBuilder().command(checkAllModulesAvailableCommand.toArray(new String[0])).start();
-			try (BufferedReader br = new BufferedReader(new InputStreamReader(allModulesCheckProcess.getErrorStream()))) {
-				String line;
-				while ((line = br.readLine()) != null) {
-					allModulesAvailableErrorSB.append(line);
-				}
-			}
-
-			if (!allModulesAvailableErrorSB.toString().isEmpty()) {
-				List<String> modulesNotFound = new LinkedList<>();
-				for (String module : PYTHON_REQUIRED_MODULES) {
-					Process moduleCheck = new ProcessBuilder().command(COMMAND_PYTHON_EXEC[0], COMMAND_PYTHON_EXEC[1], "import " + module).start();
-					StringBuilder errorSB = new StringBuilder();
-					try (BufferedReader br = new BufferedReader(new InputStreamReader(moduleCheck.getErrorStream()))) {
-						String line;
-						while ((line = br.readLine()) != null) {
-							errorSB.append(line);
-						}
-					}
-					if (!errorSB.toString().isEmpty() && errorSB.toString().contains(PYTHON_MODULE_NOT_FOUND_ERROR_MSG)) {
-						this.logger.debug("Could not load python module {}: {}", module, errorSB);
-						modulesNotFound.add(module);
-					}
-				}
-				if (!modulesNotFound.isEmpty()) {
-					throw new SystemRequirementsNotMetException("Could not find required python modules: " + SetUtil.implode(modulesNotFound, ", "));
-				}
-			}
-
-		} catch (IOException e) {
-			throw new SystemRequirementsNotMetException("Could not check whether python is installed in the required version. Is python available as a command on your command line?");
-		}
+	public MLPlanSKLearnClusterBuilder withUnlimitedLengthPipelineSearchSpace() throws IOException {
+		return (MLPlanSKLearnClusterBuilder) this.withSearchSpaceConfigFile(FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_UL_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG));
 	}
 
 	@Override

@@ -102,6 +102,10 @@ public abstract class AbstractMLPlanBuilder implements IMLPlanBuilder, ILoggingC
 	public static MLPlanSKLearnBuilder forSKLearn() throws IOException {
 		return new MLPlanSKLearnBuilder();
 	}
+	
+	public static MLPlanSKLearnClusterBuilder forSKLearnCluster() throws IOException {
+		return new MLPlanSKLearnClusterBuilder();
+	}
 
 	public static MLPlanWekaBuilder forWeka() throws IOException {
 		return new MLPlanWekaBuilder();

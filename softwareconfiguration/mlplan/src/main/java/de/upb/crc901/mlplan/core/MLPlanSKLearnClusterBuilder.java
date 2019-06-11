@@ -1,5 +1,6 @@
 package de.upb.crc901.mlplan.core;
 
+import jaicore.ml.evaluation.evaluators.weka.factory.ClusteringValidationEvaluationFactory;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -46,10 +47,7 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 	private static final IClassifierFactory DEF_CLASSIFIER_FACTORY = new SKLearnClassifierFactory();
 	private static final File DEF_SEARCH_SPACE_CONFIG = FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG);
 	private static final File DEF_PREFERRED_COMPONENTS = FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_PREFERRED_COMPONENTS, FS_SKLEARN_PREFERRED_COMPONENTS);
-	private static final MonteCarloCrossValidationEvaluatorFactory DEF_SEARCH_PHASE_EVALUATOR = new MonteCarloCrossValidationEvaluatorFactory().withNumMCIterations(SEARCH_NUM_MC_ITERATIONS).withTrainFoldSize(SEARCH_TRAIN_FOLD_SIZE)
-			.withSplitBasedEvaluator(new SimpleSLCSplitBasedClassifierEvaluator(LOSS_FUNCTION)).withDatasetSplitter(new MulticlassClassStratifiedSplitter());
-	private static final MonteCarloCrossValidationEvaluatorFactory DEF_SELECTION_PHASE_EVALUATOR = new MonteCarloCrossValidationEvaluatorFactory().withNumMCIterations(SELECTION_NUM_MC_ITERATIONS).withTrainFoldSize(SELECTION_TRAIN_FOLD_SIZE)
-			.withSplitBasedEvaluator(new SimpleSLCSplitBasedClassifierEvaluator(LOSS_FUNCTION)).withDatasetSplitter(new MulticlassClassStratifiedSplitter());
+	private static final ClusteringValidationEvaluationFactory DEF_SEARCH_PHASE_EVALUATOR = new ClusteringValidationEvaluationFactory();
 
 	/**
 	 * Creates a new ML-Plan Builder for scikit-learn.
@@ -76,7 +74,6 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 		this.withClassifierFactory(DEF_CLASSIFIER_FACTORY);
 		this.withDatasetSplitterForSearchSelectionSplit(DEF_SELECTION_HOLDOUT_SPLITTER);
 		this.withSearchPhaseEvaluatorFactory(DEF_SEARCH_PHASE_EVALUATOR);
-		this.withSelectionPhaseEvaluatorFactory(DEF_SELECTION_PHASE_EVALUATOR);
 		this.setPerformanceMeasureName(LOSS_FUNCTION.getClass().getSimpleName());
 	}
  

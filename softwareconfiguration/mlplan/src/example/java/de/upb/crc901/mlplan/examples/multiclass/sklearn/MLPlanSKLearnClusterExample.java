@@ -23,6 +23,7 @@ public class MLPlanSKLearnClusterExample {
 	private static final Logger L = LoggerFactory.getLogger(MLPlanSKLearnClusterExample.class);
 
 	private static final File DATASET = new File("testrsc/car.arff");
+	//TODO change to external validation measure
 	private static final ZeroOneLoss LOSS_MEASURE = new ZeroOneLoss();
 
 	private static final TimeOut TIMEOUT = new TimeOut(300, TimeUnit.SECONDS);
@@ -45,6 +46,7 @@ public class MLPlanSKLearnClusterExample {
 
 		List<Double> actual = Arrays.stream(mlplan.classifyInstances(data)).mapToObj(x -> x).collect(Collectors.toList());
 		List<Double> expected = labels.stream().map(x -> x.classValue()).collect(Collectors.toList());
+		//TODO is avgmeasure still correct?
 		double loss = LOSS_MEASURE.calculateAvgMeasure(actual, expected);
 		L.info("ML-Plan classifier has been chosen for dataset {} and framework SK-Learn. The measured test loss of the selected classifier is {}", DATASET.getAbsolutePath(), loss);
 	}

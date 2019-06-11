@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import de.upb.crc901.mlplan.core.AbstractMLPlanBuilder;
-import de.upb.crc901.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterMLPlanWekaClassifier;
+import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterMLPlanWekaClassifier;
 import de.upb.crc901.mlplan.multiclass.wekamlplan.sklearn.SKLearnMLPlanWekaClassifier;
 import jaicore.basic.TimeOut;
 import jaicore.ml.WekaUtil;

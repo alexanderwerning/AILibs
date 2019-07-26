@@ -256,7 +256,7 @@ def run_train_mode(data):
     if sys.argv["problem"] == "regression":
         features, targets = get_feature_target_matrices(data)
     elif sys.argv["problem"] == "clustering":
-    	features = np.array(data)
+        features = np.array(data)
     else:
         features, targets = data.input_matrix, data.output_matrix
         y_train = []
@@ -281,11 +281,27 @@ def run_train_test_mode(data, testdata):
     the script was started with or those that were given to the template.
     Returns path to serialized model.
     """
+    # Create instance of classifier with given parameters.
+    classifier_instance = {{classifier_construct}}
+
     if sys.argv["problem"] == "regression":
+        # get training data
         features, targets = get_feature_target_matrices(data)
+        # train model
+        classifier_instance.fit(features, targets)
+        # get test data
+        test_features, test_targets = get_feature_target_matrices(testdata)
+        # make prediction
+        prediction = classifier_instance.predict(test_features)
     elif sys.argv["problem"] == "clustering":
-    	features = np.array(data.input_matrix)
-    else:
+        # get training data
+        features = np.array(data)
+        # train model
+        classifier_instance.fit(features)
+        # get clustering
+        prediction = classifier_instance.labels_
+    else:#classification
+        # get training data
         features, targets = data.input_matrix, data.output_matrix
         y_train = []
         for crow in targets:
@@ -294,17 +310,13 @@ def run_train_test_mode(data, testdata):
                     y_train.append(x)
         targets = np.array(y_train)
         features = np.array(features)
-    # Create instance of classifier with given parameters.
-    classifier_instance = {{classifier_construct}}
-    classifier_instance.fit(features, targets)
-    
-    if sys.argv["problem"] == "regression":
-        test_features, test_targets = get_feature_target_matrices(testdata)
-    elif sys.argv["problem"] == "clustering":
-    	test_features = data.input_matrix
-    else:
+        # train model
+        classifier_instance.fit(features, targets)
+        # get test data
         test_features = testdata.input_matrix
-    prediction = classifier_instance.predict(test_features)
+        # make prediction
+        prediction = classifier_instance.predict(test_features)
+
     serialize_prediction(prediction)
 
 def run_test_mode(data):
@@ -316,14 +328,13 @@ def run_test_mode(data):
         classifier_instance = pickle.load(file)
 
     if sys.argv["problem"] == "clustering":
-    	features = data
-    	prediction = classifier_instance.predict(features)
+        features = data
+        prediction = classifier_instance.predict(features)
+    elif sys.argv["problem"] == "regression":
+            features, targets = get_feature_target_matrices(data)
     else:
-    	if sys.argv["problem"] == "regression":
-        	features, targets = get_feature_target_matrices(data)
-    	else:
-        	features = data.input_matrix
-    	prediction = classifier_instance.predict(features)
+        features = data.input_matrix
+        prediction = classifier_instance.predict(features)
     serialize_prediction(prediction)
 
 

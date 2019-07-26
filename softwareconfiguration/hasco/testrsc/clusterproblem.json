@@ -8,8 +8,8 @@
       "name" : "k",
       "type" : "int",
       "default" : "1.0",
-      "min" : 1.0,
-      "max" : 20.0,
+      "min" : 1,
+      "max" : 20,
       "refineSplits" : 8,
       "minInterval" : 1
     } ],
@@ -25,15 +25,15 @@
       "min" : 1.0E-12,
       "max" : 10.0,
       "refineSplits" : 8,
-      "minInterval" : 10
+      "minInterval" : 0.1
     }, {
       "name" : "minPoints",
       "type" : "int",
-      "default" : 1.0,
-      "min" : 1.0,
-      "max" : 100.0,
+      "default" : 1,
+      "min" : 1,
+      "max" : 100,
       "refineSplits" : 8,
-      "minInterval" : 0.1
+      "minInterval" : 1
     } ],
     "dependencies" : [  ]
   }, {
@@ -55,11 +55,11 @@
     "requiredInterface" : [ ],
     "providedInterface" : [ "IClusterAlgorithm" ],
     "parameter" : [  {
-      "name" : "k",
+      "name" : "n_clusters",
       "type" : "int",
       "default" : "1.0",
-      "min" : 1.0,
-      "max" : 20.0,
+      "min" : 1,
+      "max" : 20,
       "refineSplits" : 8,
       "minInterval" : 1
     }, {

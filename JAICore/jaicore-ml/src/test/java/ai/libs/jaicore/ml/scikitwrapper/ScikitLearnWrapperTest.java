@@ -14,7 +14,6 @@ import java.util.List;
 import org.junit.Test;
 
 import ai.libs.jaicore.ml.WekaUtil;
-import ai.libs.jaicore.ml.scikitwrapper.ScikitLearnWrapper;
 import ai.libs.jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType;
 import weka.core.Instances;
 import weka.core.converters.ArffLoader.ArffReader;
@@ -141,8 +140,8 @@ public class ScikitLearnWrapperTest {
 	public void trainClassifierClustering() throws Exception {
 		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
 		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		jaicore.ml.scikitwrapper.ScikitLearnWrapper slw = new jaicore.ml.scikitwrapper.ScikitLearnWrapper(constructInstruction, jaicore.ml.scikitwrapper.ScikitLearnWrapper.getImportString(imports));
-		slw.setProblemType(jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType.CLUSTERING);
+		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
 		Instances dataset = this.loadARFF(REGRESSION_ARFF);
 		slw.buildClassifier(dataset);
 		System.out.println(slw.getModelPath());
@@ -154,8 +153,8 @@ public class ScikitLearnWrapperTest {
 	public void trainAndTestClassifierClustering() throws Exception {
 		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
 		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		jaicore.ml.scikitwrapper.ScikitLearnWrapper slw = new jaicore.ml.scikitwrapper.ScikitLearnWrapper(constructInstruction, jaicore.ml.scikitwrapper.ScikitLearnWrapper.getImportString(imports));
-		slw.setProblemType(jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType.CLUSTERING);
+		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
 		Instances datasetTrain = this.loadARFF(REGRESSION_ARFF);
 		Instances datasetTest = datasetTrain;
 		slw.buildClassifier(datasetTrain);
@@ -167,8 +166,8 @@ public class ScikitLearnWrapperTest {
 	public void testClassifierClustering() throws Exception {
 		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
 		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		jaicore.ml.scikitwrapper.ScikitLearnWrapper slw = new jaicore.ml.scikitwrapper.ScikitLearnWrapper(constructInstruction, jaicore.ml.scikitwrapper.ScikitLearnWrapper.getImportString(imports));
-		slw.setProblemType(jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType.CLUSTERING);
+		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
 		Instances datasetTest = this.loadARFF(REGRESSION_ARFF);
 		slw.setModelPath(new File(CLUSTERING_DUMP).getAbsoluteFile());
 		double[] result = slw.classifyInstances(datasetTest);

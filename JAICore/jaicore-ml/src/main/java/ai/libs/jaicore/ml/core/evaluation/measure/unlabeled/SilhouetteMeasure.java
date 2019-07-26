@@ -1,44 +1,45 @@
 package ai.libs.jaicore.ml.core.evaluation.measure.unlabeled;
 
-import jaicore.basic.aggregate.IAggregateFunction;
+
+import ai.libs.jaicore.ml.tsc.util.MathUtil;
 import java.util.List;
 
-public class SilhouetteMeasure extends AInternalClusteringMeasure {
+public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 
 	@Override
-	public Double calculateMeasure(List<List<double[]>> clusters) {
+	public Double calculateMeasure(final List<List<double[]>> clusters) {
 		double sum = 0;
 		double size = 0;
 		for (int i = 0; i < clusters.size(); i++) {
-			List<double[]> cluster = clusters.get(i);
+			final List<double[]> cluster = clusters.get(i);
 			size += cluster.size();
 			for (int j = 0; j < cluster.size(); j++) {
-				double[] point = cluster.get(j);
-				double distanceToOwnCluster = distancePointToCluster(cluster, point);
+				final double[] point = cluster.get(j);
+				final double distanceToOwnCluster = distancePointToCluster(cluster, point);
 				double distanceToOtherCluster = Double.MAX_VALUE;
 				for (int k = 0; k < clusters.size(); k++) {
-					if(k == i){
+					if (k == i) {
 						continue;
 					}
-					double tmp = distancePointToCluster(cluster, point);
-					if(tmp > distanceToOtherCluster){
+					final double tmp = distancePointToCluster(cluster, point);
+					if (tmp > distanceToOtherCluster) {
 						distanceToOtherCluster = tmp;
 					}
 				}
 				if (distanceToOtherCluster != 0 && distanceToOwnCluster != 0) {
-					sum += (distanceToOtherCluster-distanceToOwnCluster)/Math.max(distanceToOtherCluster,distanceToOwnCluster);
+					sum += (distanceToOtherCluster - distanceToOwnCluster) / Math.max(distanceToOtherCluster, distanceToOwnCluster);
 				}
 			}
 		}
-		return sum/size;
+		return sum / size;
 	}
 
-	private double distancePointToCluster(List<double[]> cluster, double[] point){
+	private double distancePointToCluster(final List<double[]> cluster, final double[] point) {
 		double sum = 0;
 		for (int i = 0; i < cluster.size(); i++) {
-			sum += distance(cluster.get(i),point);
+			sum += MathUtil.singleSquaredEuclideanDistance(cluster.get(i), point);
 		}
-		return sum/cluster.size();
+		return sum / cluster.size();
 	}
 
 }

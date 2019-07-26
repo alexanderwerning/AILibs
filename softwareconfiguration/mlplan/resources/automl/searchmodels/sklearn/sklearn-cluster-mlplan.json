@@ -7,9 +7,9 @@
     "parameter" : [ {
       "name" : "n_clusters",
       "type" : "int",
-      "default" : "1.0",
-      "min" : 1.0,
-      "max" : 20.0,
+      "default" : "1",
+      "min" : 1,
+      "max" : 20,
       "refineSplits" : 8,
       "minInterval" : 1
     } ],
@@ -29,11 +29,11 @@
     }, {
       "name" : "min_samples",
       "type" : "int",
-      "default" : 1.0,
-      "min" : 1.0,
-      "max" : 100.0,
+      "default" : 1,
+      "min" : 1,
+      "max" : 100,
       "refineSplits" : 8,
-      "minInterval" : 0.1
+      "minInterval" : 1
     } ],
     "dependencies" : [  ]
   }, {
@@ -57,9 +57,9 @@
     "parameter" : [  {
       "name" : "n_clusters",
       "type" : "int",
-      "default" : "1.0",
-      "min" : 1.0,
-      "max" : 20.0,
+      "default" : "1",
+      "min" : 1,
+      "max" : 20,
       "refineSplits" : 8,
       "minInterval" : 1
     }, {

@@ -1,7 +1,9 @@
 package ai.libs.mlplan.core;
 
+import ai.libs.jaicore.ml.core.evaluation.measure.IMeasure;
 import ai.libs.jaicore.ml.evaluation.evaluators.weka.factory.ClusteringValidationEvaluationFactory;
 
+import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterClassifierFactory;
 import java.io.File;
 import java.io.IOException;
 
@@ -13,7 +15,7 @@ import ai.libs.jaicore.basic.FileUtil;
 import ai.libs.jaicore.ml.weka.dataset.splitter.IDatasetSplitter;
 import ai.libs.jaicore.ml.weka.dataset.splitter.MulticlassClassStratifiedSplitter;
 import ai.libs.mlplan.multiclass.wekamlplan.IClassifierFactory;
-import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClassifierFactory;
+import weka.core.Instances;
 
 public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 
@@ -28,8 +30,7 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 	private static final String FS_SKLEARN_PREFERRED_COMPONENTS = "conf/sklearn-preferenceList.txt";
 
 	private static final String DEF_REQUESTED_HASCO_INTERFACE = "ClusteringAlgorithm";
-	private static final IDatasetSplitter DEF_SELECTION_HOLDOUT_SPLITTER = new MulticlassClassStratifiedSplitter();
-	private static final IClassifierFactory DEF_CLASSIFIER_FACTORY = new SKLearnClassifierFactory();
+	private static final IClassifierFactory DEF_CLASSIFIER_FACTORY = new SKLearnClusterClassifierFactory();
 	private static final File DEF_SEARCH_SPACE_CONFIG = FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG);
 	private static final File DEF_PREFERRED_COMPONENTS = FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_PREFERRED_COMPONENTS, FS_SKLEARN_PREFERRED_COMPONENTS);
 	private static final ClusteringValidationEvaluationFactory DEF_SEARCH_PHASE_EVALUATOR = new ClusteringValidationEvaluationFactory();
@@ -57,7 +58,6 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 		this.withPreferredComponentsFile(DEF_PREFERRED_COMPONENTS);
 		this.withRequestedInterface(DEF_REQUESTED_HASCO_INTERFACE);
 		this.withClassifierFactory(DEF_CLASSIFIER_FACTORY);
-		this.withDatasetSplitterForSearchSelectionSplit(DEF_SELECTION_HOLDOUT_SPLITTER);
 		this.withSearchPhaseEvaluatorFactory(DEF_SEARCH_PHASE_EVALUATOR);
 		this.setPerformanceMeasureName(LOSS_FUNCTION.getClass().getSimpleName());
 	}
@@ -69,6 +69,11 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 	 */
 	public MLPlanSKLearnClusterBuilder withUnlimitedLengthPipelineSearchSpace() throws IOException {
 		return (MLPlanSKLearnClusterBuilder) this.withSearchSpaceConfigFile(FileUtil.getExistingFileWithHighestPriority(RES_SKLEARN_UL_SEARCHSPACE_CONFIG, FS_SEARCH_SPACE_CONFIG));
+	}
+
+	public MLPlanSKLearnClusterBuilder withValidationMeasure(IMeasure<Instances, Double> measure){
+		DEF_SEARCH_PHASE_EVALUATOR.withMeasure(measure);
+		return this;
 	}
 
 	@Override

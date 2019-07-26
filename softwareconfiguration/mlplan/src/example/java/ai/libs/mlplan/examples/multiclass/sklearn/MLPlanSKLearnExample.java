@@ -20,8 +20,7 @@ import weka.core.Instances;
 public class MLPlanSKLearnExample {
 
 	private static final Logger L = LoggerFactory.getLogger(MLPlanSKLearnExample.class);
-
-	private static final File DATASET = new File("testrsc/car.arff");
+	private static final File DATASET = new File("softwareconfiguration/mlplan/testrsc/car.arff");
 	private static final ZeroOneLoss LOSS_MEASURE = new ZeroOneLoss();
 
 	private static final TimeOut TIMEOUT = new TimeOut(300, TimeUnit.SECONDS);

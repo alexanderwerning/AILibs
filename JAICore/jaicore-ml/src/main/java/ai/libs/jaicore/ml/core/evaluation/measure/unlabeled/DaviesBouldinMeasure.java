@@ -14,7 +14,7 @@ public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
 	 */
 	@Override
 	public Double calculateMeasure(final List<List<double[]>> clusters) {
-
+		System.out.println("number of clusters: " + clusters.size());
 		final int N = clusters.size();
 		final List<double[]> centroids = new LinkedList<>();
 		for (int i = 0; i < N; i++) {
@@ -38,7 +38,7 @@ public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
 	}
 
 	private double clusterDistances(final List<double[]> cluster1, final double[] centroid1, final List<double[]> cluster2, final double[] centroid2) {
-		return singleSquaredEuclideanDistance(centroid1, centroid2);
+		return Math.sqrt(singleSquaredEuclideanDistance(centroid1, centroid2));
 	}
 
 
@@ -50,8 +50,7 @@ public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
 			for (int j = 0; j < centroid.length; j++) {
 				vectorLength += Math.pow(centroid[j] - cluster.get(i)[j], 2);
 			}
-			vectorLength = Math.sqrt(vectorLength);
-			sqsum += Math.pow(vectorLength, 2);
+			sqsum += vectorLength;
 		}
 		sqsum /= cluster.size();
 		return Math.sqrt(sqsum);

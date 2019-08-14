@@ -35,14 +35,11 @@ public class DunnMeasure extends AInternalClusteringValidationMeasure {
 			}
 		}
 
-		double min_d = 0;
+		double min_d = Double.MAX_VALUE;
 		for (int i = 0; i < c; i++) {
-			for (int j = 0; j < c; j++) {
-				if (i == j) {
-					continue;
-				}
+			for (int j = 0; j < i; j++) {
 				final double cur_d = d5(i, j);
-				if (cur_d < min_d) {
+				if (cur_d > 0 && cur_d < min_d) {
 					min_d = cur_d;
 				}
 			}
@@ -66,7 +63,7 @@ public class DunnMeasure extends AInternalClusteringValidationMeasure {
 	private double sumOfDistances(final List<double[]> cluster, final double[] point) {
 		double sum = 0;
 		for (int i = 0; i < cluster.size(); i++) {
-			sum += singleSquaredEuclideanDistance(cluster.get(i), point);
+			sum += Math.sqrt(singleSquaredEuclideanDistance(cluster.get(i), point));
 		}
 		return sum;
 	}

@@ -21,8 +21,8 @@ public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 					if (k == i) {
 						continue;
 					}
-					final double tmp = distancePointToCluster(cluster, point);
-					if (tmp > distanceToOtherCluster) {
+					final double tmp = distancePointToCluster(clusters.get(k), point);
+					if (tmp < distanceToOtherCluster) {
 						distanceToOtherCluster = tmp;
 					}
 				}
@@ -37,7 +37,7 @@ public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 	private double distancePointToCluster(final List<double[]> cluster, final double[] point) {
 		double sum = 0;
 		for (int i = 0; i < cluster.size(); i++) {
-			sum += MathUtil.singleSquaredEuclideanDistance(cluster.get(i), point);
+			sum += Math.sqrt(MathUtil.singleSquaredEuclideanDistance(cluster.get(i), point));
 		}
 		return sum / cluster.size();
 	}

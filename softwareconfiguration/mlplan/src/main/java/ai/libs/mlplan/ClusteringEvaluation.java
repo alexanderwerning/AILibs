@@ -7,6 +7,7 @@ import ai.libs.jaicore.ml.evaluation.IInstancesClassifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -47,7 +48,9 @@ public class ClusteringEvaluation {
 			unlabeledData.add(newInstance);
 			newInstance.setDataset(unlabeledData);
 		}
-		unlabeledData.setClassIndex(-1);//ignored, but needed for mlplan
+		//unlabeledData.setClassIndex(-1);//ignored, but needed for mlplan
+
+		// train classifier on unlabeled data
 		try {
 			classifier.buildClassifier(unlabeledData);
 		} catch (final Exception e) {
@@ -59,13 +62,18 @@ public class ClusteringEvaluation {
 		} else {
 			throw new IllegalArgumentException("The given Classifier does not implement the IInstancesClassifier interface needed for clustering.");
 		}
+
+		final ClusteringResult cr = new ClusteringResult();
+		cr.setInternalEvaluationResult(Double.MAX_VALUE);
+
+		// evaluate external cluster validation measure
 		final List<Double> actual;
 		final double[] results;
 		try {
 			results = instancesClassifier.classifyInstances(unlabeledData);
 		} catch (final Exception e) {
 			L.error(e.getMessage());
-			return null;
+			return cr;
 		}
 		actual = Arrays.stream(results).boxed().collect(Collectors.toList());
 
@@ -73,10 +81,10 @@ public class ClusteringEvaluation {
 
 		final double loss = EXTERNAL_MEASURE.calculateExternalMeasure(actual, expected);
 
-		final ClusteringResult cr = new ClusteringResult();
 		cr.setExternalEvaluationResult(loss);
+		cr.setResultValid(false);
 
-		//calculate internal validation measure
+		//calculate internal cluster validation measure
 		Instances classifiedData = new Instances(unlabeledData);
 		final Add add = new Add();
 		add.setAttributeName("label");
@@ -95,23 +103,26 @@ public class ClusteringEvaluation {
 		}
 		classifiedData.setClassIndex(classifiedData.numAttributes() - 1);
 
-		double[] classificationResult = new double[classifiedData.size()];
-
-		try {
-			classificationResult = instancesClassifier.classifyInstances(unlabeledData);
-		} catch (final Exception e) {
-			e.printStackTrace();
-		}
+		final HashMap<Double, Integer> classes = new HashMap<>();
 
 		for (int i = 0; i < classifiedData.size(); i++) {
-			classifiedData.instance(i).setValue(classifiedData.classIndex(), classificationResult[i]);
+			classifiedData.instance(i).setValue(classifiedData.classIndex(), results[i]);
+			if (classes.containsKey(results[i])) {
+				classes.put(results[i], classes.get(results[i]) + 1);
+			} else {
+				classes.put(results[i], 1);
+			}
 		}
+
+		cr.setResultValid(classes.size() > 1);
+		cr.setN_clusters(classes.size());
 
 		try {
 			cr.setInternalEvaluationResult(internalMeasure.calculateMeasure(classifiedData, null));
 		} catch (final Exception e) {
 			e.printStackTrace();
 		}
+
 		return cr;
 	}
 
@@ -119,6 +130,8 @@ public class ClusteringEvaluation {
 
 		double externalEvaluationResult;
 		double internalEvaluationResult;
+		boolean resultValid;
+		int n_clusters;
 
 		public double getExternalEvaluationResult() {
 			return this.externalEvaluationResult;
@@ -134,6 +147,22 @@ public class ClusteringEvaluation {
 
 		void setInternalEvaluationResult(final double internalEvaluationResult) {
 			this.internalEvaluationResult = internalEvaluationResult;
+		}
+
+		boolean isResultValid() {
+			return this.resultValid;
+		}
+
+		void setResultValid(final boolean resultValid) {
+			this.resultValid = resultValid;
+		}
+
+		public int getN_clusters() {
+			return this.n_clusters;
+		}
+
+		void setN_clusters(final int n_clusters) {
+			this.n_clusters = n_clusters;
 		}
 	}
 }

@@ -48,7 +48,7 @@ public class ClusteringValidationEvaluator implements IClassifierEvaluator, ILog
 
 			final Instances actual = new Instances(this.data);
 			try {
-				final double[] results = classifier.classifyInstances(actual);
+				final double[] results = classifier.classifyInstances(this.data);
 				for (int i = 0; i < actual.size(); i++) {
 					actual.get(i).setValue(actual.classIndex(), results[i]);
 				}

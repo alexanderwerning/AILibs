@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -71,7 +72,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 
 	private static final File MODEL_DUMPS_DIRECTORY = new File(TMP_FOLDER, "model_dumps");
 	private static final boolean VERBOSE = false; // If true the output stream of the python process is printed.
-	private static final boolean DELETE_TEMPORARY_FILES_ON_EXIT = true;
+	private static final boolean DELETE_TEMPORARY_FILES_ON_EXIT = false; //TODO change back to true;
 
 	/* The type of problem that is to be solved by the ScikitLearn classifier. */
 	public enum ProblemType {
@@ -222,7 +223,8 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 
 			this.runProcess(testCommand, new DefaultProcessListener(VERBOSE));
 		} else {
-			String[] testCommand = new SKLearnWrapperCommandBuilder().withTrainTestMode().withArffFile(this.trainArff).withTestArffFile(testArff).withOutputFile(outputFile).toCommandArray();
+			final String[] testCommand = new SKLearnWrapperCommandBuilder().withTrainTestMode().withArffFile(this.trainArff).withTestArffFile(testArff).withOutputFile(outputFile).toCommandArray();
+
 			if (L.isDebugEnabled()) {
 				L.debug("Run train test mode with {}", Arrays.toString(testCommand));
 			}
@@ -239,12 +241,14 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 			}
 			final ObjectMapper objMapper = new ObjectMapper();
 			this.rawLastClassificationResults = objMapper.readValue(fileContent, List.class);
-		} catch (IOException e) {
-			throw new IOException("Could not read result file or parse the json content to a list", e);
+		} catch (final ClosedByInterruptException e) {
+			L.info("Received interrupt while reading or parsing Scikitwrapper result file.");
+		} catch (final IOException e) {
+			throw new IOException("Could not read result file or parse the json content to a list" + outputFile, e);
 		}
 
 		/* Since Scikit supports multiple target results but Weka does not, the results have to be flattened.
-		 * The structured results of the last classifyInstances call is accessable over
+		 * The structured results of the last classifyInstances call is accessible over
 		 * getRawLastClassificationResults().
 		 * */
 		final List<Double> flatresults = this.rawLastClassificationResults.stream().flatMap(List::stream).collect(Collectors.toList());
@@ -377,12 +381,18 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 	 * Starts a process with the given attributes. The first String in the array is the executed program.
 	 */
 	private void runProcess(final String[] parameters, final AProcessListener listener) throws InterruptedException, IOException {
+		L.info("Process parameters: " + Arrays.stream(parameters).collect(Collectors.joining(", ")));
 		if (L.isDebugEnabled()) {
 			final String call = Arrays.toString(parameters).replace(",", "");
 			L.debug("Starting process {}", call.substring(1, call.length() - 1));
 		}
 		final ProcessBuilder processBuilder = new ProcessBuilder(parameters).directory(TMP_FOLDER);
-		listener.listenTo(processBuilder.start());
+		final Process process = processBuilder.start();
+		try {
+			listener.listenTo(process);
+		} finally {
+			process.destroy();
+		}
 	}
 
 	@Override

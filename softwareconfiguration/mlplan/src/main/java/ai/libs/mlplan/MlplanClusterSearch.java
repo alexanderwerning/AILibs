@@ -18,14 +18,12 @@ import ai.libs.jaicore.experiments.databasehandle.ExperimenterSQLHandle;
 import ai.libs.jaicore.experiments.exceptions.ExperimentDBInteractionFailedException;
 import ai.libs.jaicore.experiments.exceptions.ExperimentEvaluationFailedException;
 import ai.libs.jaicore.experiments.exceptions.IllegalExperimentSetupException;
-import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.AExternalClusteringValidationMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.DaviesBouldinMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.DensityBasedMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.DunnMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.IInternalClusteringValidationMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.SilhouetteMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.SquaredErrorMeasure;
-import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.VanDongenMeasure;
 import ai.libs.jaicore.ml.openml.OpenMLHelper;
 import ai.libs.mlplan.ClusteringEvaluation.ClusteringResult;
 import ai.libs.mlplan.core.AbstractMLPlanBuilder;
@@ -37,7 +35,6 @@ import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterClassifierFact
 import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterMLPlanWekaClassifier;
 import com.google.common.eventbus.Subscribe;
 import java.io.File;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -53,6 +50,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.aeonbits.owner.ConfigFactory;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import weka.classifiers.Classifier;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -70,7 +69,8 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	private static final String FS_SEARCH_SPACE_CONFIG = "softwareconfiguration/mlplan/resources/automl/searchmodels/sklearn/sklearn-cluster-mlplan.json";
 	private static final String DEF_REQUESTED_HASCO_INTERFACE = "ClusteringAlgorithm";
 
-	private static final AExternalClusteringValidationMeasure EXTERNAL_MEASURE = new VanDongenMeasure();
+	Logger L = LoggerFactory.getLogger(MlplanClusterSearch.class);
+
 
 	@Override
 	public void evaluate(final ExperimentDBEntry experimentEntry, final IExperimentIntermediateResultProcessor processor) throws ExperimentEvaluationFailedException {
@@ -138,9 +138,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 					data = tmpData;
 				}
 
-				final TimeOut candidateTimeout = new TimeOut(Integer.parseInt(experimentDescription.get("candTimeout")), TimeUnit.SECONDS);
-
-				System.out.println("Get list of all possible algorithm selections.");
 				final Collection<Component> allComponents = new ComponentLoader(new File(FS_SEARCH_SPACE_CONFIG)).getComponents();
 				final Collection<Component> componentsProvidingInterface = ComponentUtil.getComponentsProvidingInterface(allComponents, DEF_REQUESTED_HASCO_INTERFACE);
 				//ADAPT HYPERPARAMETERS TO DATASET PROPERTIES
@@ -172,148 +169,137 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 				timer.schedule(new TimerTask() {
 					@Override
 					public void run() {
-						System.out.println("Cancel random search");
+						System.out.println("Cancel mlplan search");
 						status.decrementAndGet();
 						executorService.shutdownNow();
 						final Map<String, Object> expResult = new HashMap<>();
 						expResult.put("done", 1);
-						try {
-							final ResultSet resultSet = adapter.getResultsOfQuery("SELECT min(internalMeasureResult) FROM "
-																					  + CONFIG.getDBTableName() + " WHERE experiment_id = " + experimentEntry.getId());
-							resultSet.next();
-							final double internalMeasureResult = resultSet.getDouble(1);
-							expResult.put("internalMeasureResult", internalMeasureResult);
 
-							final ResultSet classifierComponent = adapter.getResultsOfQuery(
-								"SELECT mainClassifier,componentInstance FROM " + CONFIG.getDBTableName() + " WHERE internalMeasureResult = "
-									+ "(SELECT min(internalMeasureResult) FROM "
-									+ CONFIG.getDBTableName() + " WHERE experiment_id = " + experimentEntry.getId() + ")  AND experiment_id = " + experimentEntry.getId());
-							classifierComponent.next();
-							expResult.put("mainClassifier", classifierComponent.getString(1));
-							expResult.put("componentInstance", classifierComponent.getString(2));
-
-						} catch (final SQLException e) {
-							e.printStackTrace();
-						}
 						processor.processResults(expResult);
 					}
 				}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());
 				System.out.println("Schedule jobs for evaluations.");
+
 				final long startTimestamp = System.currentTimeMillis();
-				for (int i = 0; i < experimentEntry.getExperiment().getNumCPUs(); i++) {
-					executorService.submit(new Runnable() {
-						@Override
-						public void run() {
-							try {
-								while (status.get() == 1) {
-									if (Thread.interrupted()) {
-										return;
+
+				try {
+					while (status.get() == 1) {
+						if (Thread.interrupted()) {
+							return;
+						}
+						final AbstractMLPlanBuilder builder = AbstractMLPlanBuilder.forSKLearnCluster();
+						builder.withTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("timeout")), TimeUnit.SECONDS));
+						builder.withNodeEvaluationTimeOut(new TimeOut(900, TimeUnit.SECONDS));
+						builder.withCandidateEvaluationTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("candTimeout")), TimeUnit.SECONDS));
+						builder.withNumCpus(experimentEntry.getExperiment().getNumCPUs());
+						// use internal cluster validation measure defined in experiment description
+						final IInternalClusteringValidationMeasure internalMeasure;
+						switch (experimentDescription.get("internalClusterValidationMeasure")) {
+							case "DaviesBouldin":
+								internalMeasure = new DaviesBouldinMeasure();
+								break;
+							case "DensityBased":
+								internalMeasure = new DensityBasedMeasure();
+								break;
+							case "Dunn":
+								internalMeasure = new DunnMeasure();
+								break;
+							case "Silhouette":
+								internalMeasure = new SilhouetteMeasure();
+								break;
+							case "SquaredError":
+								internalMeasure = new SquaredErrorMeasure();
+								break;
+							default:
+								internalMeasure = new SquaredErrorMeasure();
+						}
+
+						((MLPlanSKLearnClusterBuilder) builder).withValidationMeasure(internalMeasure);
+						//TODO adapt hp ranges!!!c
+						final SKLearnClusterMLPlanWekaClassifier mlplan = new SKLearnClusterMLPlanWekaClassifier(builder);
+						mlplan.setLoggerName("sklmlplanc");
+						mlplan.setVisualizationEnabled(false);//TODO visualization
+						mlplan.getMLPlanConfig().setProperty(MLPlanClassifierConfig.SELECTION_PORTION, "0");//set selection split to 0
+						class ClassifierFoundListener {
+
+							@Subscribe
+							public void receiveSolutionEvent(final ClassifierFoundEvent event) {
+								final Map<String, Object> results = new HashMap<>();
+								results.put("experiment_id", experimentEntry.getId());
+								results.put("mainClassifier", event.getSolutionCandidate().toString());
+								results.put("componentInstance", event.getComponentDescription().toString());
+								final double inSampleError = event.getInSampleError();
+								if (new Double(inSampleError).isInfinite()) {
+									if (new Double(inSampleError) > 0) {
+										results.put("internalMeasureResult", Double.MAX_VALUE);
+									} else {
+										results.put("internalMeasureResult", Double.MIN_VALUE);
 									}
-									final AbstractMLPlanBuilder builder = AbstractMLPlanBuilder.forSKLearnCluster();
-									builder.withTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("timeout")), TimeUnit.SECONDS));
-									builder.withNodeEvaluationTimeOut(new TimeOut(900, TimeUnit.SECONDS));
-									builder.withCandidateEvaluationTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("candTimeout")), TimeUnit.SECONDS));
-
-									// use internal cluster validation measure defined in experiment description
-									final IInternalClusteringValidationMeasure internalMeasure;
-									switch (experimentDescription.get("internalClusterValidationMeasure")) {
-										case "DaviesBouldin":
-											internalMeasure = new DaviesBouldinMeasure();
-											break;
-										case "DensityBased":
-											internalMeasure = new DensityBasedMeasure();
-											break;
-										case "Dunn":
-											internalMeasure = new DunnMeasure();
-											break;
-										case "Silhouette":
-											internalMeasure = new SilhouetteMeasure();
-											break;
-										case "SquaredError":
-											internalMeasure = new SquaredErrorMeasure();
-											break;
-										default:
-											internalMeasure = new SquaredErrorMeasure();
-									}
-
-									((MLPlanSKLearnClusterBuilder) builder).withValidationMeasure(internalMeasure);
-									//TODO adapt hp ranges!!!c
-									final SKLearnClusterMLPlanWekaClassifier mlplan = new SKLearnClusterMLPlanWekaClassifier(builder);
-									mlplan.setLoggerName("sklmlplanc");
-									mlplan.setVisualizationEnabled(false);//TODO visualization
-									mlplan.getMLPlanConfig().setProperty(MLPlanClassifierConfig.SELECTION_PORTION, "0");//set selection split to 0
-									mlplan.registerListener(this);
-									// set candidate timeout
-									final TimerTask candidateTimeoutTask = new TimerTask() {
-										private final Thread currentThread = Thread.currentThread();
-
-										@Override
-										public void run() {
-											System.out.println("Candidate Timeout: Interrupt current thread evaluating " + mlplan.getSelectedClassifier());
-											this.currentThread.interrupt();
-										}
-									};
-
-									mlplan.buildClassifier(data);
-
-									//timer.schedule(candidateTimeoutTask, candidateTimeout.milliseconds());
-
-									System.out.println("Evaluate " + mlplan.getSelectedClassifier() + " " + experimentDescription.get("dataset"));
-
-									// store experiment information
-									final Map<String, Object> results = new HashMap<>();
-									results.put("experiment_id", experimentEntry.getId());
-									results.put("mainClassifier", mlplan.getSelectedClassifier());
-									results.put("componentInstance", mlplan.getSelectedClassifier());
-									System.out.println(mlplan.getSelectedClassifier());
-									try {
-										final long evalStart;
-										{
-											final Classifier c = mlplan;
-
-											/* Validate the classifier */
-											evalStart = System.currentTimeMillis();
-											final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
-
-											results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
-											if (valRes.isResultValid()) {
-												results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
-											} else {
-												results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
-											}
-										}
-
-										results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
-										results.put("exception", "");
-										final Map<String, Object> map = new HashMap<>();
-										map.putAll(results);
-										map.remove("experiment_id");
-										processor.processResults(results);
-									} catch (final Exception e) {
-										e.printStackTrace();
-										final StringBuilder stackTraceBuilder = new StringBuilder();
-										for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
-											stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
-										}
-										results.put("exception", stackTraceBuilder.toString());
-									} finally {
-										candidateTimeoutTask.cancel();
-									}
-									try {
-										adapter.insert("mlplansearch_eval", results);
-										results.remove("componentInstance");
-										System.out.println("Results collected " + results);
-									} catch (final SQLException e) {
-										e.printStackTrace();
-									}
-
+								} else {
+									results.put("internalMeasureResult", event.getInSampleError());
 								}
-							} catch (final Throwable e) {
-								e.printStackTrace();
+								try {
+									adapter.insert("mlplansearch_eval", results);
+								} catch (final SQLException e) {
+									e.printStackTrace();
+								}
+								L.info("ClassifierFoundEvent. mainClassifier: " + event.getSolutionCandidate());
 							}
 						}
-					});
+						final ClassifierFoundListener listener = new ClassifierFoundListener();
+						mlplan.registerListener(listener);
+
+						mlplan.buildClassifier(data);
+
+						System.out.println("Evaluate " + mlplan.getSelectedClassifier() + " " + experimentDescription.get("dataset"));
+
+						// store experiment information
+						final Map<String, Object> results = new HashMap<>();
+						results.put("experiment_id", experimentEntry.getId());
+						results.put("mainClassifier", mlplan.getSelectedClassifier());
+						results.put("componentInstance", mlplan.getSelectedClassifier());
+						System.out.println(mlplan.getSelectedClassifier());
+						try {
+							final long evalStart;
+							{
+								final Classifier c = mlplan;
+
+								/* Validate the classifier */
+								evalStart = System.currentTimeMillis();
+								final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
+
+								results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
+								if (valRes.isResultValid()) {
+									results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
+								} else {
+									results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
+								}
+							}
+
+							results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
+							results.put("exception", "");
+
+
+						} catch (final Exception e) {
+							e.printStackTrace();
+							final StringBuilder stackTraceBuilder = new StringBuilder();
+							for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
+								stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
+							}
+							results.put("exception", stackTraceBuilder.toString());
+						} finally {
+							final Map<String, Object> map = new HashMap<>();
+							map.putAll(results);
+							map.remove("experiment_id");
+							processor.processResults(map);
+						}
+
+					}
+				} catch (final Throwable e) {
+					e.printStackTrace();
 				}
+
+
 			}
 		} catch (final Exception e) {
 			e.printStackTrace();
@@ -322,10 +308,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 
 	}
 
-	@Subscribe
-	public void receiveSolutionEvent(final ClassifierFoundEvent event) {
-		System.out.println(event);
-	}
 
 	public static void main(final String[] args) throws ExperimentDBInteractionFailedException, IllegalExperimentSetupException {
 		//CONFIG.setProperty("db.table", "experiment002");

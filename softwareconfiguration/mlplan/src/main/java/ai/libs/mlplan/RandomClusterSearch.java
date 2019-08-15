@@ -29,7 +29,6 @@ import ai.libs.mlplan.ClusteringEvaluation.ClusteringResult;
 import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClassifierFactory;
 import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterClassifierFactory;
 import java.io.File;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -39,6 +38,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -157,6 +157,8 @@ public class RandomClusterSearch implements IExperimentSetEvaluator {
 				System.out.println("Number of possible algorithm selections: " + possibleAlgorithmSelections.size());
 				final SKLearnClassifierFactory factory = new SKLearnClusterClassifierFactory();
 
+				final ConcurrentHashMap<String, Object> bestResult = new ConcurrentHashMap<>();
+
 				// set timeout timer
 				final Timer timer = new Timer();
 				timer.schedule(new TimerTask() {
@@ -167,24 +169,7 @@ public class RandomClusterSearch implements IExperimentSetEvaluator {
 						executorService.shutdownNow();
 						final Map<String, Object> expResult = new HashMap<>();
 						expResult.put("done", 1);
-						try {
-							final ResultSet resultSet = adapter.getResultsOfQuery("SELECT min(internalMeasureResult) FROM "
-																					  + CONFIG.getDBTableName() + " WHERE experiment_id = " + experimentEntry.getId());
-							resultSet.next();
-							final double internalMeasureResult = resultSet.getDouble(1);
-							expResult.put("internalMeasureResult", internalMeasureResult);
-
-							final ResultSet classifierComponent = adapter.getResultsOfQuery(
-								"SELECT mainClassifier,componentInstance FROM " + CONFIG.getDBTableName() + " WHERE internalMeasureResult = "
-									+ "(SELECT min(internalMeasureResult) FROM "
-									+ CONFIG.getDBTableName() + " WHERE experiment_id = " + experimentEntry.getId() + ")  AND experiment_id = " + experimentEntry.getId());
-							classifierComponent.next();
-							expResult.put("mainClassifier", classifierComponent.getString(1));
-							expResult.put("componentInstance", classifierComponent.getString(2));
-
-						} catch (final SQLException e) {
-							e.printStackTrace();
-						}
+						expResult.putAll(bestResult);
 						processor.processResults(expResult);
 					}
 				}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());
@@ -263,8 +248,10 @@ public class RandomClusterSearch implements IExperimentSetEvaluator {
 											results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
 											if (valRes.isResultValid()) {
 												results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
+												results.put("nClusters", valRes.getN_clusters());
 											} else {
 												results.put("internalMeasureResult", 1000);//Double.MAX_VALUE); //maximal loss if invalid
+												results.put("nClusters", -1);
 											}
 										}
 
@@ -281,8 +268,11 @@ public class RandomClusterSearch implements IExperimentSetEvaluator {
 										candidateTimeoutTask.cancel();
 									}
 									try {
-										System.out.println(results);
 										adapter.insert("randomsearch_eval", results);
+										if (bestResult.size() == 0 || (double) results.get("internalMeasureResult") > (double) bestResult.get("internalMeasureResult")) {
+											bestResult.clear();
+											bestResult.putAll(results);
+										}
 										results.remove("componentInstance");
 										System.out.println("Results collected " + results);
 									} catch (final SQLException e) {

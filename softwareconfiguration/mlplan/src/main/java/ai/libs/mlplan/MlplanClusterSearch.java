@@ -69,7 +69,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	private static final String FS_SEARCH_SPACE_CONFIG = "softwareconfiguration/mlplan/resources/automl/searchmodels/sklearn/sklearn-cluster-mlplan.json";
 	private static final String DEF_REQUESTED_HASCO_INTERFACE = "ClusteringAlgorithm";
 
-	Logger L = LoggerFactory.getLogger(MlplanClusterSearch.class);
+	private final Logger L = LoggerFactory.getLogger(MlplanClusterSearch.class);
 
 
 	@Override
@@ -243,7 +243,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 								} catch (final SQLException e) {
 									e.printStackTrace();
 								}
-								L.info("ClassifierFoundEvent. mainClassifier: " + event.getSolutionCandidate());
+								MlplanClusterSearch.this.L.info("ClassifierFoundEvent. mainClassifier: " + event.getSolutionCandidate());
 							}
 						}
 						final ClassifierFoundListener listener = new ClassifierFoundListener();
@@ -271,8 +271,10 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 								results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
 								if (valRes.isResultValid()) {
 									results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
+									results.put("nClusters", valRes.getN_clusters());
 								} else {
 									results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
+									results.put("nClusters", -1);
 								}
 							}
 
@@ -313,7 +315,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 		//CONFIG.setProperty("db.table", "experiment002");
 		System.out.println(CONFIG);
 		final ExperimentRunner runner = new ExperimentRunner(CONFIG, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));//, 1);
-		runner.randomlyConductExperiments(1, false);
+		runner.randomlyConductExperiments(100, false);
 	}
 
 }

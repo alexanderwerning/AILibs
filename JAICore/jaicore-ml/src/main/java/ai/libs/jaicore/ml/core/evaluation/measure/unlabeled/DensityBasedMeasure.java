@@ -4,7 +4,6 @@ import static ai.libs.jaicore.ml.tsc.util.MathUtil.singleSquaredEuclideanDistanc
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.DoubleBinaryOperator;
 
 
 /*
@@ -19,25 +18,45 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 		this.stddev = calculateStandardDeviation(clusters);
 		final double interClusterDensity = calculateInterClusterDensity(clusters);
 		final double intraClusterVariance = calculateIntraClusterVariance(clusters);
+		System.out.println(
+			(interClusterDensity + intraClusterVariance) + " " + clusters.size() + ": " + clusters.stream().mapToInt(x -> x.size()).min().getAsInt() + " " + clusters.stream().mapToInt(x -> x.size())
+																																								 .max().getAsInt());
+		if (interClusterDensity == 0.0) {
+			System.out.println(clusters);
+		}
 		return interClusterDensity + intraClusterVariance;
 	}
 
 	private Double calculateStandardDeviation(final List<List<double[]>> clusters) {
-		return Math.sqrt(clusters.stream().mapToDouble(x -> calculateSigma(x)).reduce(new DoubleBinaryOperator() {
-			@Override
-			public double applyAsDouble(final double a, final double b) {
-				return a + b;
-			}
-		}).getAsDouble()) / clusters.size();
+		final int dimensions = clusters.get(0).get(0).length;
+		final double[] zero = new double[dimensions];
+		double sum = 0;
+		for (int i = 0; i < clusters.size(); i++) {
+			final double[] varianceVector = calculateSigma(clusters.get(i), this.centroids.get(i));
+			sum += singleSquaredEuclideanDistance(zero, varianceVector);
+		}
+		return Math.sqrt(sum) / clusters.size();
 	}
 
-	private Double calculateSigma(final List<double[]> cluster) {
-		return 0d;
+	private double[] calculateSigma(final List<double[]> cluster, final double[] centroid) {
+		final int dimensions = centroid.length;
+
+		final double[] variance = new double[dimensions];
+		for (int j = 0; j < cluster.size(); j++) {
+			for (int k = 0; k < dimensions; k++) {
+				variance[k] += Math.pow(centroid[k] - cluster.get(j)[k], 2);
+			}
+
+		}
+		for (int i = 0; i < dimensions; i++) {
+			variance[i] = variance[i] / cluster.size();
+		}
+		return variance;
 	}
 
 	private Double calculateInterClusterDensity(final List<List<double[]>> clusters) {
 		final double c = clusters.size();
-		double dens_bw = 1 / (c * (c - 1));
+		double dens_bw = 0;
 		for (int i = 0; i < c; i++) {
 			for (int j = 0; j < i; j++) {
 				final double[] vi = this.centroids.get(i);
@@ -58,13 +77,13 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 				}
 			}
 		}
-		return dens_bw;
+		return dens_bw / (c * (c - 1));
 	}
 
 	private double calculateDensity(final double[] point, final List<double[]> neighbourhood) {
 		double sum = 0;
 		for (int i = 0; i < neighbourhood.size(); i++) {
-			if (Math.sqrt(singleSquaredEuclideanDistance(point, neighbourhood.get(i))) > this.stddev) {
+			if (Math.sqrt(singleSquaredEuclideanDistance(point, neighbourhood.get(i))) < this.stddev) {
 				sum++;
 			}
 		}
@@ -86,25 +105,30 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 			datasetCentroid[i] /= instances;
 		}
 
-		double sum = 0;
-		final double[] zero = new double[dimensions];
-		final double[] totalVariance = new double[dimensions];
+		final List<double[]> sigmas = new ArrayList<>();
 		for (int i = 0; i < clusters.size(); i++) {
-			final List<double[]> cluster = clusters.get(i);
-			final double[] variance = new double[dimensions];
-			for (int j = 0; j < cluster.size(); j++) {
-				for (int k = 0; k < dimensions; k++) {
-					variance[k] += Math.pow(this.centroids.get(i)[k] - cluster.get(j)[k], 2);
-					totalVariance[k] += Math.pow(datasetCentroid[k] - cluster.get(j)[k], 2);
-				}
-			}
-
-			sum += singleSquaredEuclideanDistance(variance, zero);
+			sigmas.add(calculateSigma(clusters.get(i), this.centroids.get(i)));
 		}
-		sum /= clusters.size();
-		final double datasetVariance = singleSquaredEuclideanDistance(totalVariance, zero) / instances;
 
-		return sum / datasetVariance;
+		final List<double[]> dataset = new ArrayList<>();
+		clusters.stream().map(x -> dataset.addAll(x));
+		final double[] datasetSigma = calculateSigma(dataset, datasetCentroid);
+
+		final double[] zero = new double[dimensions];
+
+		final ArrayList<Double> clusterVariances = new ArrayList<Double>();
+		for (int i = 0; i < sigmas.size(); i++) {
+			clusterVariances.add(singleSquaredEuclideanDistance(zero, sigmas.get(i)));
+		}
+
+		final double datasetVariance = singleSquaredEuclideanDistance(zero, datasetSigma);
+
+		double sum = 0;
+		for (int i = 0; i < clusterVariances.size(); i++) {
+			sum += clusterVariances.get(i);
+		}
+
+		return (sum / clusters.size()) / datasetVariance;
 	}
 
 }

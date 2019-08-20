@@ -243,6 +243,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 			this.rawLastClassificationResults = objMapper.readValue(fileContent, List.class);
 		} catch (final ClosedByInterruptException e) {
 			L.info("Received interrupt while reading or parsing Scikitwrapper result file.");
+			throw new IOException("Received interrupt while reading or parsing Scikitwrapper result file.");
 		} catch (final IOException e) {
 			throw new IOException("Could not read result file or parse the json content to a list" + outputFile, e);
 		}

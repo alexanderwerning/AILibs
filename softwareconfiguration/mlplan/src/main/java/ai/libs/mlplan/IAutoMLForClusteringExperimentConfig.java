@@ -14,5 +14,8 @@ public interface IAutoMLForClusteringExperimentConfig extends IExperimentSetConf
 	@Key("datasetDir")
 	public File datasetDirectory();
 
+	@Key("db.table_results")
+	public String resultsTable();
+
 
 }

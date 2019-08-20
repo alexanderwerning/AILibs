@@ -33,12 +33,16 @@ import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClassifierFactory;
 import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterClassifierFactory;
 import ai.libs.mlplan.multiclass.wekamlplan.sklearn.SKLearnClusterMLPlanWekaClassifier;
 import com.google.common.eventbus.Subscribe;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -73,28 +77,29 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 
 	private final Logger L = LoggerFactory.getLogger(MlplanClusterSearch.class);
 
+	private static final File TMP_FOLDER = new File("tmp"); // Folder to put the json files
 
 	@Override
 	public void evaluate(final ExperimentDBEntry experimentEntry, final IExperimentIntermediateResultProcessor processor) throws ExperimentEvaluationFailedException {
 		try {
-			System.out.println("ExperimentEntry: " + experimentEntry);
+			this.L.info("ExperimentEntry: " + experimentEntry);
 			final Experiment experiment = experimentEntry.getExperiment();
-			System.out.println("Conduct experiment " + experiment);
+			this.L.info("Conduct experiment " + experiment);
 			final Map<String, String> experimentDescription = experiment.getValuesOfKeyFields();
-			System.out.println("Experiment Description as follows: " + experimentDescription);
+			this.L.info("Experiment Description as follows: " + experimentDescription);
 			final int numCPUs = experiment.getNumCPUs();
 			final ExecutorService executorService = Executors.newFixedThreadPool(numCPUs);
 
 			try (final SQLAdapter adapter = new SQLAdapter(CONFIG.getDBHost(), CONFIG.getDBUsername(), CONFIG.getDBPassword(), CONFIG.getDBDatabaseName())) {
 				final int seed = Integer.parseInt(experimentDescription.get("seed"));
 				final Random rand = new Random(seed);
-				final FileReader fileReader = new FileReader(new File(CONFIG.datasetDirectory(), experimentDescription.get("dataset") + ".arff"));
+				final FileReader fileReader = new FileReader(new File(CONFIG.datasetDirectory(), experimentDescription.get("dataset")));
 				final Instances unprocessedData = new Instances(fileReader);
 				//final Instances unprocessedData = OpenMLHelper.getInstancesById(Integer.parseInt(experimentDescription.get("dataset")));
 				/* ScikitLearnWrapper does not support nominal attributes, the NominalToNumeric Filter is used to convert the dataset*/
 				unprocessedData.removeIf(Instance::hasMissingValue);
 				if (unprocessedData.size() == 0) {
-					System.out.println("Dataset size is 0, aborting");
+					this.L.error("Dataset size is 0, aborting");
 					return;
 				}
 				/* Convert nominal data to numeric */
@@ -162,7 +167,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 				final List<ComponentInstance> possibleAlgorithmSelections =
 					componentsProvidingInterface.stream().map(x -> new ComponentInstance(x, new HashMap<>(), new HashMap<>())).collect(Collectors.toList());
 
-				System.out.println("Number of possible algorithm selections: " + possibleAlgorithmSelections.size());
+				this.L.error("Number of possible algorithm selections: " + possibleAlgorithmSelections.size());
 				final SKLearnClassifierFactory factory = new SKLearnClusterClassifierFactory();
 
 				// use internal cluster validation measure defined in experiment description
@@ -193,117 +198,110 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 				switch (experimentDescription.get("strategy")) {
 					case "mlplan":
 
-						// set timeout timer
+						/*// set timeout timer
 						timer.schedule(new TimerTask() {
 							@Override
 							public void run() {
 								System.out.println("Cancel mlplan search");
-								status.decrementAndGet();
-								executorService.shutdownNow();
 								final Map<String, Object> expResult = new HashMap<>();
-								expResult.put("done", 1);
 
 								processor.processResults(expResult);
 							}
-						}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());
-						System.out.println("Schedule jobs for evaluations.");
+						}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());*/
 
 						startTimestamp = System.currentTimeMillis();
 
 						try {
-							while (status.get() == 1) {
-								if (Thread.interrupted()) {
-									return;
-								}
-								final AbstractMLPlanBuilder builder = AbstractMLPlanBuilder.forSKLearnCluster();
-								builder.withTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("timeout")), TimeUnit.SECONDS));
-								builder.withNodeEvaluationTimeOut(new TimeOut(900, TimeUnit.SECONDS));
-								builder.withCandidateEvaluationTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("candTimeout")), TimeUnit.SECONDS));
-								builder.withNumCpus(experimentEntry.getExperiment().getNumCPUs());
 
-								((MLPlanSKLearnClusterBuilder) builder).withValidationMeasure(internalMeasure);
-								//TODO adapt hp ranges!!!c
-								final SKLearnClusterMLPlanWekaClassifier mlplan = new SKLearnClusterMLPlanWekaClassifier(builder);
-								mlplan.setLoggerName("sklmlplanc");
-								mlplan.setVisualizationEnabled(false);//TODO visualization
-								mlplan.getMLPlanConfig().setProperty(MLPlanClassifierConfig.SELECTION_PORTION, "0");//set selection split to 0
-								class ClassifierFoundListener {
+							final AbstractMLPlanBuilder builder = AbstractMLPlanBuilder.forSKLearnCluster();
+							builder.withTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("timeout")), TimeUnit.SECONDS));
+							builder.withNodeEvaluationTimeOut(new TimeOut(900, TimeUnit.SECONDS));
+							builder.withCandidateEvaluationTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("candTimeout")), TimeUnit.SECONDS));
+							builder.withNumCpus(experimentEntry.getExperiment().getNumCPUs());
+							final File createdFile = getSearchSpaceConfigFile(componentsProvidingInterface);
+							//builder.withSearchSpaceConfigFile(createdFile);
 
-									@Subscribe
-									public void receiveSolutionEvent(final ClassifierFoundEvent event) {
-										final Map<String, Object> results = new HashMap<>();
-										results.put("experiment_id", experimentEntry.getId());
-										results.put("mainClassifier", event.getSolutionCandidate().toString());
-										results.put("componentInstance", event.getComponentDescription().toString());
-										final double inSampleError = event.getInSampleError();
-										if (new Double(inSampleError).isInfinite()) {
-											if (new Double(inSampleError) > 0) {
-												results.put("internalMeasureResult", Double.MAX_VALUE);
-											} else {
-												results.put("internalMeasureResult", Double.MIN_VALUE);
-											}
+							((MLPlanSKLearnClusterBuilder) builder).withValidationMeasure(internalMeasure);
+							final SKLearnClusterMLPlanWekaClassifier mlplan = new SKLearnClusterMLPlanWekaClassifier(builder);
+							mlplan.setLoggerName("AutomatedClusteringLogger");
+							mlplan.setVisualizationEnabled(false);
+							mlplan.getMLPlanConfig().setProperty(MLPlanClassifierConfig.SELECTION_PORTION, "0");//set selection split to 0
+							class ClassifierFoundListener {
+
+								@Subscribe
+								public void receiveSolutionEvent(final ClassifierFoundEvent event) {
+									final Map<String, Object> results = new HashMap<>();
+									results.put("experiment_id", experimentEntry.getId());
+									results.put("mainClassifier", event.getSolutionCandidate().toString());
+									results.put("componentInstance", event.getComponentDescription().toString());
+									final double inSampleError = event.getInSampleError();
+									if (new Double(inSampleError).isInfinite()) {
+										if (new Double(inSampleError) > 0) {
+											results.put("internalMeasureResult", Double.MAX_VALUE);
 										} else {
-											results.put("internalMeasureResult", event.getInSampleError());
+											results.put("internalMeasureResult", Double.MIN_VALUE);
 										}
-										try {
-											adapter.insert("mlplansearch_eval", results);
-										} catch (final SQLException e) {
-											e.printStackTrace();
-										}
-										MlplanClusterSearch.this.L.info("ClassifierFoundEvent. mainClassifier: " + event.getSolutionCandidate());
+									} else {
+										results.put("internalMeasureResult", event.getInSampleError());
+									}
+									try {
+										adapter.insert(CONFIG.resultsTable(), results);
+									} catch (final SQLException e) {
+										e.printStackTrace();
 									}
 								}
-								final ClassifierFoundListener listener = new ClassifierFoundListener();
-								mlplan.registerListener(listener);
-
-								mlplan.buildClassifier(data);
-
-								System.out.println("Evaluate " + mlplan.getSelectedClassifier() + " " + experimentDescription.get("dataset"));
-
-								// store experiment information
-								final Map<String, Object> results = new HashMap<>();
-								results.put("experiment_id", experimentEntry.getId());
-								results.put("mainClassifier", mlplan.getSelectedClassifier());
-								results.put("componentInstance", mlplan.getSelectedClassifier());
-								System.out.println(mlplan.getSelectedClassifier());
-								try {
-									final long evalStart;
-									{
-										final Classifier c = mlplan;
-
-										/* Validate the classifier */
-										evalStart = System.currentTimeMillis();
-										final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
-
-										results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
-										if (valRes.isResultValid()) {
-											results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
-											results.put("nClusters", valRes.getN_clusters());
-										} else {
-											results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
-											results.put("nClusters", -1);
-										}
-									}
-
-									results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
-									results.put("exception", "");
-
-
-								} catch (final Exception e) {
-									e.printStackTrace();
-									final StringBuilder stackTraceBuilder = new StringBuilder();
-									for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
-										stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
-									}
-									results.put("exception", stackTraceBuilder.toString());
-								} finally {
-									final Map<String, Object> map = new HashMap<>();
-									map.putAll(results);
-									map.remove("experiment_id");
-									processor.processResults(map);
-								}
-
 							}
+							final ClassifierFoundListener listener = new ClassifierFoundListener();
+							mlplan.registerListener(listener);
+
+							mlplan.buildClassifier(data);
+
+							this.L.info("Evaluate " + mlplan.getSelectedClassifier() + " " + experimentDescription.get("dataset"));
+
+							// store experiment information
+							final Map<String, Object> results = new HashMap<>();
+							results.put("mainClassifier", mlplan.getSelectedClassifier());
+							results.put("componentInstance", mlplan.getSelectedClassifier());
+
+							try {
+								final long evalStart;
+								{
+									final Classifier c = mlplan;
+
+									/* Validate the classifier */
+									evalStart = System.currentTimeMillis();
+									final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
+
+									results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
+									if (valRes.isResultValid()) {
+										results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
+
+									} else {
+										results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
+									}
+									results.put("externalMeasureResult", valRes.getExternalEvaluationResult());
+									results.put("n_clusters", valRes.getN_clusters());
+								}
+
+								results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
+								results.put("exception", "");
+
+
+							} catch (final Exception e) {
+								e.printStackTrace();
+								final StringBuilder stackTraceBuilder = new StringBuilder();
+								for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
+									stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
+								}
+								results.put("exception", stackTraceBuilder.toString());
+							} finally {
+								final Map<String, Object> map = new HashMap<>();
+								map.putAll(results);
+								map.put("done", 1);
+								processor.processResults(map);
+							}
+
+
 						} catch (final Throwable e) {
 							e.printStackTrace();
 						}
@@ -329,7 +327,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 								processor.processResults(expResult);
 							}
 						}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());
-						System.out.println("Schedule jobs for evaluations.");
+						this.L.info("Schedule jobs for evaluations.");
 						startTimestamp = System.currentTimeMillis();
 						for (int i = 0; i < experimentEntry.getExperiment().getNumCPUs(); i++) {
 							executorService.submit(new Runnable() {
@@ -351,7 +349,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 												ciHyp.getParameterValues().clear();
 												ciHyp.getParameterValues().putAll(ComponentUtil.randomParameterizationOfComponent(ciHyp.getComponent(), rand).getParameterValues());
 											}
-											System.out.println(ci);
 											// use internal cluster validation measure defined in experiment description
 
 											// set candidate timeout
@@ -360,13 +357,13 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 
 												@Override
 												public void run() {
-													System.out.println("Candidate Timeout: Interrupt current thread evaluating " + ci.getNestedComponentDescription());
+													MlplanClusterSearch.this.L.info("Candidate Timeout: Interrupt current thread evaluating " + ci.getNestedComponentDescription());
 													this.currentThread.interrupt();
 												}
 											};
 											timer.schedule(candidateTimeoutTask, candidateTimeout.milliseconds());
 
-											System.out.println("Evaluate " + ci.getNestedComponentDescription() + " " + experimentDescription.get("dataset"));
+											MlplanClusterSearch.this.L.info("Evaluate " + ci.getNestedComponentDescription() + " " + experimentDescription.get("dataset"));
 
 											// store experiment information
 											final Map<String, Object> results = new HashMap<>();
@@ -385,11 +382,13 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 													results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
 													if (valRes.isResultValid()) {
 														results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
-														results.put("n_clusters", valRes.getN_clusters());
+
 													} else {
 														results.put("internalMeasureResult", 1000.0);//Double.MAX_VALUE); //maximal loss if invalid
-														results.put("n_clusters", -1);
+
 													}
+													results.put("externalMeasureResult", valRes.getExternalEvaluationResult());
+													results.put("n_clusters", valRes.getN_clusters());
 												}
 
 												results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
@@ -405,13 +404,14 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 												candidateTimeoutTask.cancel();
 											}
 											try {
-												adapter.insert("experiment_temp", results);
-												if (bestResult.size() == 0 || (double) results.get("internalMeasureResult") > (double) bestResult.get("internalMeasureResult")) {
+												results.put("done", 1);
+												adapter.insert(CONFIG.resultsTable(), results);
+												if (bestResult.size() == 0 || (double) results.get("internalMeasureResult") < (double) bestResult.get("internalMeasureResult")) {
 													bestResult.clear();
 													bestResult.putAll(results);
 												}
 												results.remove("componentInstance");
-												System.out.println("Results collected " + results);
+												MlplanClusterSearch.this.L.info("Results collected " + results);
 											} catch (final SQLException e) {
 												e.printStackTrace();
 											}
@@ -433,13 +433,44 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 
 	}
 
+	private File getSearchSpaceConfigFile(final Collection<Component> components) {
+		final String filename = "searchSpace" + components.hashCode() + ".json";
+
+		final File outputFile = new File(TMP_FOLDER, filename);
+		/* If Instances with the same Instance (given the hash is collision resistant) is already serialized, there is no need for doing it once more. */
+		if (outputFile.exists()) {
+			this.L.debug("Reusing {}", outputFile);
+			return outputFile;
+		}
+		try (final BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile))) {
+			bw.write(serializeComponents(components));
+		} catch (final IOException e) {
+			this.L.error("could not write temporary search space config");
+		}
+		return outputFile;
+	}
+
+	private String serializeComponents(final Collection<Component> components) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append("{\n"
+					  + "  \"repository\" : \"ClusterProblem\",\n"
+					  + "  \"components\" : [ ");
+		final Iterator<Component> it = components.iterator();
+
+		while (it.hasNext()) {
+			sb.append(it.next().toString());
+			if (it.hasNext()) {
+				sb.append(",");
+			}
+		}
+		sb.append("]}");
+		return sb.toString();
+	}
 
 	public static void main(final String[] args) throws ExperimentDBInteractionFailedException, IllegalExperimentSetupException {
-		CONFIG.setProperty("db.table", "experiment");
 		CONFIG.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
-		System.out.println(CONFIG);
 		final ExperimentRunner runner = new ExperimentRunner(CONFIG, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));//, 1);
-		runner.randomlyConductExperiments(10000, false);
+		runner.randomlyConductExperiments(10, false);
 	}
 
 }

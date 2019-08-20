@@ -55,7 +55,6 @@ public class ClusterUtil {
 			final int clusterIndex = label2index.get(labeledData.get(i).value(labeledData.classIndex()));
 			clusters.get(clusterIndex).add(labeledData.get(i).toDoubleArray());
 		}
-
 		return clusters;
 	}
 

@@ -53,11 +53,11 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 			this.checkPythonSetup();
 		}
 		this.withSearchSpaceConfigFile(DEF_SEARCH_SPACE_CONFIG);
-		this.withPreferredComponentsFile(DEF_PREFERRED_COMPONENTS);
+		//this.withPreferredComponentsFile(DEF_PREFERRED_COMPONENTS);
 		this.withRequestedInterface(DEF_REQUESTED_HASCO_INTERFACE);
 		this.withClassifierFactory(DEF_CLASSIFIER_FACTORY);
 		this.withSearchPhaseEvaluatorFactory(DEF_SEARCH_PHASE_EVALUATOR);
-		this.setPerformanceMeasureName(LOSS_FUNCTION.getClass().getSimpleName());
+		//this.setPerformanceMeasureName(LOSS_FUNCTION.getClass().getSimpleName());
 	}
 
 	/**

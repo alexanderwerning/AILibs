@@ -3,8 +3,6 @@ package ai.libs.jaicore.ml.core.evaluation.measure.unlabeled;
 
 import static ai.libs.jaicore.ml.tsc.util.MathUtil.singleSquaredEuclideanDistance;
 
-import ai.libs.jaicore.ml.ClusterUtil;
-import java.util.LinkedList;
 import java.util.List;
 
 public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
@@ -13,13 +11,10 @@ public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
 	 * In the original paper this is formulated as a loss (minimized for best clustering) loss measure is needed here
 	 */
 	@Override
-	public Double calculateMeasure(final List<List<double[]>> clusters) {
+	public Double calculateMeasure(final List<List<double[]>> clusters, final List<double[]> centroids, final boolean erasure) {
 		System.out.println("number of clusters: " + clusters.size());
 		final int N = clusters.size();
-		final List<double[]> centroids = new LinkedList<>();
-		for (int i = 0; i < N; i++) {
-			centroids.add(ClusterUtil.calculateCentroid(clusters.get(i)));
-		}
+
 		double sum = 0;
 		for (int i = 0; i < N; i++) {
 			double max = 0;

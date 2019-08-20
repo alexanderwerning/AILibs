@@ -11,28 +11,21 @@ based on halkich, dataset oriented approach
  */
 public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 
-	private double stddev;
 
 	@Override
-	public Double calculateMeasure(final List<List<double[]>> clusters) {
-		this.stddev = calculateStandardDeviation(clusters);
-		final double interClusterDensity = calculateInterClusterDensity(clusters);
-		final double intraClusterVariance = calculateIntraClusterVariance(clusters);
-		System.out.println(
-			(interClusterDensity + intraClusterVariance) + " " + clusters.size() + ": " + clusters.stream().mapToInt(x -> x.size()).min().getAsInt() + " " + clusters.stream().mapToInt(x -> x.size())
-																																								 .max().getAsInt());
-		if (interClusterDensity == 0.0) {
-			System.out.println(clusters);
-		}
+	public Double calculateMeasure(final List<List<double[]>> clusters, final List<double[]> centroids, final boolean erasure) {
+		final double stddev = calculateStandardDeviation(clusters, centroids);
+		final double interClusterDensity = calculateInterClusterDensity(clusters, centroids, stddev);
+		final double intraClusterVariance = calculateIntraClusterVariance(clusters, centroids);
 		return interClusterDensity + intraClusterVariance;
 	}
 
-	private Double calculateStandardDeviation(final List<List<double[]>> clusters) {
+	private Double calculateStandardDeviation(final List<List<double[]>> clusters, final List<double[]> centroids) {
 		final int dimensions = clusters.get(0).get(0).length;
 		final double[] zero = new double[dimensions];
 		double sum = 0;
 		for (int i = 0; i < clusters.size(); i++) {
-			final double[] varianceVector = calculateSigma(clusters.get(i), this.centroids.get(i));
+			final double[] varianceVector = calculateSigma(clusters.get(i), centroids.get(i));
 			sum += singleSquaredEuclideanDistance(zero, varianceVector);
 		}
 		return Math.sqrt(sum) / clusters.size();
@@ -54,13 +47,13 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 		return variance;
 	}
 
-	private Double calculateInterClusterDensity(final List<List<double[]>> clusters) {
+	private Double calculateInterClusterDensity(final List<List<double[]>> clusters, final List<double[]> centroids, final double stddev) {
 		final double c = clusters.size();
 		double dens_bw = 0;
 		for (int i = 0; i < c; i++) {
 			for (int j = 0; j < i; j++) {
-				final double[] vi = this.centroids.get(i);
-				final double[] vj = this.centroids.get(j);
+				final double[] vi = centroids.get(i);
+				final double[] vj = centroids.get(j);
 				final double[] uij = new double[vi.length];
 				for (int k = 0; k < vi.length; k++) {
 					uij[k] = (vi[k] + vj[k]) / 2;
@@ -68,9 +61,9 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 				final List<double[]> union = new ArrayList<>();
 				union.addAll(clusters.get(i));
 				union.addAll(clusters.get(j));
-				final double densityUnion = calculateDensity(uij, union);
-				final double densityI = calculateDensity(vi, clusters.get(i));
-				final double densityJ = calculateDensity(vj, clusters.get(j));
+				final double densityUnion = calculateDensity(uij, union, stddev);
+				final double densityI = calculateDensity(vi, clusters.get(i), stddev);
+				final double densityJ = calculateDensity(vj, clusters.get(j), stddev);
 				final double max = Math.max(densityI, densityJ);
 				if (max != 0) {
 					dens_bw += densityUnion / max;
@@ -80,23 +73,23 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 		return dens_bw / (c * (c - 1));
 	}
 
-	private double calculateDensity(final double[] point, final List<double[]> neighbourhood) {
+	private double calculateDensity(final double[] point, final List<double[]> neighbourhood, final double stddev) {
 		double sum = 0;
 		for (int i = 0; i < neighbourhood.size(); i++) {
-			if (Math.sqrt(singleSquaredEuclideanDistance(point, neighbourhood.get(i))) < this.stddev) {
+			if (Math.sqrt(singleSquaredEuclideanDistance(point, neighbourhood.get(i))) < stddev) {
 				sum++;
 			}
 		}
 		return sum;
 	}
 
-	private Double calculateIntraClusterVariance(final List<List<double[]>> clusters) {
+	private Double calculateIntraClusterVariance(final List<List<double[]>> clusters, final List<double[]> centroids) {
 		final int dimensions = clusters.get(0).get(0).length;
 		final double[] datasetCentroid = new double[dimensions];
 		int instances = 0;
 		for (int j = 0; j < clusters.size(); j++) {
 			for (int i = 0; i < datasetCentroid.length; i++) {
-				datasetCentroid[i] += clusters.get(j).size() * this.centroids.get(j)[i];
+				datasetCentroid[i] += clusters.get(j).size() * centroids.get(j)[i];
 
 			}
 			instances += clusters.size();
@@ -107,11 +100,13 @@ public class DensityBasedMeasure extends AInternalClusteringValidationMeasure {
 
 		final List<double[]> sigmas = new ArrayList<>();
 		for (int i = 0; i < clusters.size(); i++) {
-			sigmas.add(calculateSigma(clusters.get(i), this.centroids.get(i)));
+			sigmas.add(calculateSigma(clusters.get(i), centroids.get(i)));
 		}
 
 		final List<double[]> dataset = new ArrayList<>();
-		clusters.stream().map(x -> dataset.addAll(x));
+		for (int i = 0; i < clusters.size(); i++) {
+			dataset.addAll(clusters.get(i));
+		}
 		final double[] datasetSigma = calculateSigma(dataset, datasetCentroid);
 
 		final double[] zero = new double[dimensions];

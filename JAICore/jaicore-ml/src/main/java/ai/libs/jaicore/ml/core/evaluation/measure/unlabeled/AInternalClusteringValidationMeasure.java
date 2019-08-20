@@ -9,13 +9,11 @@ import weka.core.Instances;
 
 public abstract class AInternalClusteringValidationMeasure implements IInternalClusteringValidationMeasure {
 
-	List<double[]> centroids;
 
-	public abstract Double calculateMeasure(List<List<double[]>> clusters);
+	public abstract Double calculateMeasure(List<List<double[]>> clusters, List<double[]> centroids, boolean erasure);// erasure forbids two list parameters
 
 	private Double calculateMeasureAndCentroids(final List<List<double[]>> clusters) {
-		this.centroids = ClusterUtil.calculateCentroids(clusters);
-		return calculateMeasure(clusters);
+		return calculateMeasure(clusters, ClusterUtil.calculateCentroids(clusters), false);
 	}
 
 	@Override

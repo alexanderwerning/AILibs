@@ -15,21 +15,18 @@ public class DunnMeasure extends AInternalClusteringValidationMeasure {
 	 * is maximized in the original version, so we negate it here
 	 */
 
-	private final List<Double> scatter = new ArrayList<>();
-	private List<List<double[]>> clusters;
 
 	@Override
-	public Double calculateMeasure(final List<List<double[]>> clusters) {
-		this.clusters = clusters;
+	public Double calculateMeasure(final List<List<double[]>> clusters, final List<double[]> centroids, final boolean erasure) {
 		final int c = clusters.size();
-
+		final List<Double> scatter = new ArrayList<>();
 		for (int i = 0; i < c; i++) {
-			this.scatter.add(sumOfDistances(clusters.get(i), this.centroids.get(i)));
+			scatter.add(sumOfDistances(clusters.get(i), centroids.get(i)));
 		}
 
 		double max_D = 0;
 		for (int i = 0; i < c; i++) {
-			final double cur_D = D3(i);
+			final double cur_D = D3(clusters.get(i), scatter.get(i));
 			if (cur_D > max_D) {
 				max_D = cur_D;
 			}
@@ -37,26 +34,29 @@ public class DunnMeasure extends AInternalClusteringValidationMeasure {
 
 		double min_d = Double.MAX_VALUE;
 		for (int i = 0; i < c; i++) {
-			for (int j = 0; j < i; j++) {
-				final double cur_d = d5(i, j);
+			for (int j = 0; j <= i; j++) {
+				final double cur_d = d5(clusters, centroids, i, j);
 				if (cur_d > 0 && cur_d < min_d) {
 					min_d = cur_d;
 				}
 			}
 		}
-		final double originalMeasure = min_d / max_D;
+		double originalMeasure = min_d / max_D;
+		if (max_D == 0) {
+			originalMeasure = Double.MAX_VALUE;
+		}
 		return -(originalMeasure);
 	}
 
-	private double D3(final int i) {
-		return 2 * this.scatter.get(i) / this.clusters.get(i).size();
+	private double D3(final List<double[]> cluster, final double scatter) {
+		return 2 * scatter / cluster.size();
 	}
 
-	private double d5(final int i, final int j) {
-		final double size = this.clusters.get(i).size() + this.clusters.get(j).size();
+	private double d5(final List<List<double[]>> clusters, final List<double[]> centroids, final int i, final int j) {
+		final double size = clusters.get(i).size() + clusters.get(j).size();
 		double sum = 0;
-		sum += sumOfDistances(this.clusters.get(i), this.centroids.get(i));
-		sum += sumOfDistances(this.clusters.get(j), this.centroids.get(j));
+		sum += sumOfDistances(clusters.get(i), centroids.get(i));
+		sum += sumOfDistances(clusters.get(j), centroids.get(j));
 		return sum / size;
 	}
 

@@ -7,7 +7,7 @@ import java.util.List;
 public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 
 	@Override
-	public Double calculateMeasure(final List<List<double[]>> clusters) {
+	public Double calculateMeasure(final List<List<double[]>> clusters, final List<double[]> centroids, final boolean erasure) {
 		double sum = 0;
 		double size = 0;
 		for (int i = 0; i < clusters.size(); i++) {
@@ -31,7 +31,7 @@ public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 				}
 			}
 		}
-		return sum / size;
+		return -sum / size;
 	}
 
 	private double distancePointToCluster(final List<double[]> cluster, final double[] point) {

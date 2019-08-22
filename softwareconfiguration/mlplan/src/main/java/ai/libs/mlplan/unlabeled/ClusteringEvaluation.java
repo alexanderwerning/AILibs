@@ -1,4 +1,4 @@
-package ai.libs.mlplan;
+package ai.libs.mlplan.unlabeled;
 
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.AExternalClusteringValidationMeasure;
 import ai.libs.jaicore.ml.core.evaluation.measure.unlabeled.IInternalClusteringValidationMeasure;
@@ -126,14 +126,14 @@ public class ClusteringEvaluation {
 		return cr;
 	}
 
-	static class ClusteringResult {
+	public static class ClusteringResult {
 
 		double externalEvaluationResult;
 		double internalEvaluationResult;
 		boolean resultValid;
 		int n_clusters;
 
-		public double getExternalEvaluationResult() {
+		double getExternalEvaluationResult() {
 			return this.externalEvaluationResult;
 		}
 
@@ -157,7 +157,7 @@ public class ClusteringEvaluation {
 			this.resultValid = resultValid;
 		}
 
-		public int getN_clusters() {
+		int getN_clusters() {
 			return this.n_clusters;
 		}
 

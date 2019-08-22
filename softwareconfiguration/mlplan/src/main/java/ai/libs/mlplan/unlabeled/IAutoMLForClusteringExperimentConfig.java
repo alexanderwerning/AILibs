@@ -1,4 +1,4 @@
-package ai.libs.mlplan;
+package ai.libs.mlplan.unlabeled;
 
 
 import ai.libs.jaicore.experiments.IDatabaseConfig;

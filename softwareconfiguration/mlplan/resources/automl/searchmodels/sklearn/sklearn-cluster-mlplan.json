@@ -1,74 +1,106 @@
 {
-  "repository" : "ClusterProblem",
-  "components" : [ {
-    "name" : "sklearn.cluster.KMeans",
-    "requiredInterface" : [ ],
-    "providedInterface" : [ "ClusteringAlgorithm" ],
-    "parameter" : [ {
-      "name" : "n_clusters",
-      "type" : "int",
-      "default" : "1",
-      "min" : 1,
-      "max" : 20,
-      "refineSplits" : 8,
-      "minInterval" : 1
-    } ],
-    "dependencies" : [ ]
-  }, {
-    "name" : "sklearn.cluster.DBSCAN",
-    "requiredInterface" : [ ],
-    "providedInterface" : [ "ClusteringAlgorithm" ],
-    "parameter" : [  {
-      "name" : "eps",
-      "type" : "double",
-      "default" : 1.0E-7,
-      "min" : 1.0E-12,
-      "max" : 10.0,
-      "refineSplits" : 8,
-      "minInterval" : 10
-    }, {
-      "name" : "min_samples",
-      "type" : "int",
-      "default" : 1,
-      "min" : 1,
-      "max" : 100,
-      "refineSplits" : 8,
-      "minInterval" : 1
-    } ],
-    "dependencies" : [  ]
-  }, {
-    "name" : "sklearn.cluster.MeanShift",
-    "requiredInterface" : [ ],
-    "providedInterface" : [ "ClusteringAlgorithm" ],
-    "parameter" : [  {
-      "name" : "bandwidth",
-      "type" : "double",
-      "default" : 1.0E-7,
-      "min" : 1.0E-12,
-      "max" : 10.0,
-      "refineSplits" : 8,
-      "minInterval" : 0.1
-    }],
-    "dependencies" : [  ]
-  }, {
-    "name" : "sklearn.cluster.AgglomerativeClustering",
-    "requiredInterface" : [ ],
-    "providedInterface" : [ "ClusteringAlgorithm" ],
-    "parameter" : [  {
-      "name" : "n_clusters",
-      "type" : "int",
-      "default" : "1",
-      "min" : 1,
-      "max" : 20,
-      "refineSplits" : 8,
-      "minInterval" : 1
-    }, {
-      "name" : "linkage",
-      "type" : "cat",
-      "default" : "complete",
-      "values" : [ "single", "ward", "complete","average"]
-    } ],
-    "dependencies" : [  ]
-  }
+  "repository": "ClusterProblem",
+  "components": [
+    {
+      "name": "sklearn.cluster.KMeans",
+      "requiredInterface": [],
+      "providedInterface": [
+        "ClusteringAlgorithm"
+      ],
+      "parameter": [
+        {
+          "name": "n_clusters",
+          "type": "int",
+          "default": 5,
+          "min": 2,
+          "max": 30,
+          "includeExtremals": true,
+          "refineSplits": 8,
+          "minInterval": 1
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "sklearn.cluster.DBSCAN",
+      "requiredInterface": [],
+      "providedInterface": [
+        "ClusteringAlgorithm"
+      ],
+      "parameter": [
+        {
+          "name": "eps",
+          "type": "double",
+          "default": 1,
+          "min": 1.0E-5,
+          "max": 1000.0,
+          "includeExtremals": true,
+          "refineSplits": 8,
+          "minInterval": 10
+        },
+        {
+          "name": "min_samples",
+          "type": "int",
+          "default": 10,
+          "min": 1,
+          "max": 100,
+          "includeExtremals": true,
+          "refineSplits": 8,
+          "minInterval": 1
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "sklearn.cluster.MeanShift",
+      "requiredInterface": [],
+      "providedInterface": [
+        "ClusteringAlgorithm"
+      ],
+      "parameter": [
+        {
+          "name": "bandwidth",
+          "type": "double",
+          "default": 1.0,
+          "min": 1.0E-5,
+          "max": 1000.0,
+          "includeExtremals": true,
+          "refineSplits": 8,
+          "minInterval": 0.1
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "sklearn.cluster.AgglomerativeClustering",
+      "requiredInterface": [],
+      "providedInterface": [
+        "ClusteringAlgorithm"
+      ],
+      "parameter": [
+        {
+          "name": "n_clusters",
+          "type": "int",
+          "default": 5,
+          "min": 2,
+          "max": 30,
+          "includeExtremals": true,
+          "refineSplits": 8,
+          "minInterval": 1
+        },
+        {
+          "name": "linkage",
+          "type": "cat",
+          "default": "complete",
+          "values": [
+            "single",
+            "ward",
+            "complete",
+            "average"
+          ]
+        }
+      ],
+      "dependencies": []
+    }
   ]
 }

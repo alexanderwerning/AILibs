@@ -56,8 +56,10 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -89,13 +91,22 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	@Override
 	public void evaluate(final ExperimentDBEntry experimentEntry, final IExperimentIntermediateResultProcessor processor) throws ExperimentEvaluationFailedException {
 		try {
+			// empty tmp folder to avoid overflow, this might not be necessary if the unlabeled data would be cached once and then read
+			/*final File tmpFolder = new File("tmp");
+			if (tmpFolder.exists()) {
+				for (final String filename : tmpFolder.list()) {
+					final File file = new File(filename);
+					if (!file.isDirectory()) {
+						file.delete();
+					}
+				}
+			}*/
 			this.L.info("ExperimentEntry: " + experimentEntry);
 			final Experiment experiment = experimentEntry.getExperiment();
 			this.L.info("Conduct experiment " + experiment);
 			final Map<String, String> experimentDescription = experiment.getValuesOfKeyFields();
 			this.L.info("Experiment Description as follows: " + experimentDescription);
 			final int numCPUs = experiment.getNumCPUs();
-			final ExecutorService executorService = Executors.newFixedThreadPool(numCPUs);
 
 			try (final SQLAdapter adapter = new SQLAdapter(CONFIG.getDBHost(), CONFIG.getDBUsername(), CONFIG.getDBPassword(), CONFIG.getDBDatabaseName())) {
 				final int seed = Integer.parseInt(experimentDescription.get("seed"));
@@ -236,7 +247,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 									final long evalStart = System.currentTimeMillis();
 									final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(event.getSolutionCandidate(), data, internalMeasure);
 
-									results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
+									results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart) / 1000);
 
 									if (new Double(inSampleError).isInfinite()) {
 										if (new Double(inSampleError) > 0) {
@@ -280,12 +291,13 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 									evalStart = System.currentTimeMillis();
 									final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
 
-									results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
-									if (valRes.isResultValid()) {
+									results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart) / 1000);
+									if (!((Double) valRes.getInternalEvaluationResult()).isInfinite() && !((Double) valRes.getInternalEvaluationResult()).isNaN()) {
 										results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
 
 									} else {
-										results.put("internalMeasureResult", 1000.0);//Double.MAX_VALUE); //maximal loss if invalid
+										results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
+
 									}
 									results.put("externalMeasureResult", valRes.getExternalEvaluationResult());
 									results.put("n_clusters", valRes.getN_clusters());
@@ -326,7 +338,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 							public void run() {
 								System.out.println("Cancel random search");
 								status.decrementAndGet();
-								executorService.shutdownNow();
 								final Map<String, Object> expResult = new HashMap<>();
 								expResult.put("done", 1);
 								expResult.putAll(bestResult);
@@ -336,99 +347,93 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 						}, new TimeOut(Integer.parseInt(experimentDescription.get("timeout")), TimeUnit.SECONDS).milliseconds());
 						this.L.info("Schedule jobs for evaluations.");
 						startTimestamp = System.currentTimeMillis();
-						for (int i = 0; i < experimentEntry.getExperiment().getNumCPUs(); i++) {
-							executorService.submit(new Runnable() {
-								@Override
-								public void run() {
-									try {
-										while (status.get() == 1) {
-											if (Thread.interrupted()) {
-												return;
-											}
-											// select random algorithm
-											final ComponentInstance ci = possibleAlgorithmSelections.get(rand.nextInt(possibleAlgorithmSelections.size()));
-											final LinkedList<ComponentInstance> cisForRandomParams = new LinkedList<>();
-											cisForRandomParams.add(ci);
-											// parametrize algorithm
-											while (!cisForRandomParams.isEmpty()) {
-												final ComponentInstance ciHyp = cisForRandomParams.poll();
-												cisForRandomParams.addAll(ciHyp.getSatisfactionOfRequiredInterfaces().values());
-												ciHyp.getParameterValues().clear();
-												ciHyp.getParameterValues().putAll(ComponentUtil.randomParameterizationOfComponent(ciHyp.getComponent(), rand).getParameterValues());
-											}
+						try {
+							while (status.get() == 1) {
+								if (Thread.interrupted()) {
+									return;
+								}
+								// select random algorithm
+								final ComponentInstance ci = possibleAlgorithmSelections.get(rand.nextInt(possibleAlgorithmSelections.size()));
+								final LinkedList<ComponentInstance> cisForRandomParams = new LinkedList<>();
+								cisForRandomParams.add(ci);
+								// parametrize algorithm
+								while (!cisForRandomParams.isEmpty()) {
+									final ComponentInstance ciHyp = cisForRandomParams.poll();
+									cisForRandomParams.addAll(ciHyp.getSatisfactionOfRequiredInterfaces().values());
+									ciHyp.getParameterValues().clear();
+									ciHyp.getParameterValues().putAll(ComponentUtil.randomParameterizationOfComponent(ciHyp.getComponent(), rand).getParameterValues());
+								}
 
-											// set candidate timeout
-											final TimerTask candidateTimeoutTask = new TimerTask() {
-												private final Thread currentThread = Thread.currentThread();
+								// set candidate timeout
+								final TimerTask candidateTimeoutTask = new TimerTask() {
+									private final Thread currentThread = Thread.currentThread();
 
-												@Override
-												public void run() {
-													MlplanClusterSearch.this.L.info("Candidate Timeout: Interrupt current thread evaluating " + ci.getNestedComponentDescription());
-													this.currentThread.interrupt();
-												}
-											};
-											timer.schedule(candidateTimeoutTask, candidateTimeout.milliseconds());
+									@Override
+									public void run() {
+										MlplanClusterSearch.this.L.info("Candidate Timeout: Interrupt current thread evaluating " + ci.getNestedComponentDescription());
+										this.currentThread.interrupt();
+									}
+								};
+								timer.schedule(candidateTimeoutTask, candidateTimeout.milliseconds());
 
-											MlplanClusterSearch.this.L.info("Evaluate " + ci.getNestedComponentDescription() + " " + experimentDescription.get("dataset"));
+								MlplanClusterSearch.this.L.info("Evaluate " + ci.getNestedComponentDescription() + " " + experimentDescription.get("dataset"));
 
-											// store experiment information
-											final Map<String, Object> results = new HashMap<>();
-											results.put("experiment_id", experimentEntry.getId());
-											results.put("mainClassifier", ci.getNestedComponentDescription());
-											results.put("componentInstance", ci.toString());
-											try {
-												final long evalStart;
-												{
-													results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
-													final Classifier c = factory.getComponentInstantiation(ci);
+								// store experiment information
+								final Map<String, Object> results = new HashMap<>();
+								results.put("experiment_id", experimentEntry.getId());
+								results.put("mainClassifier", ci.getNestedComponentDescription());
+								results.put("componentInstance", ci.toString());
+								try {
+									final long evalStart;
+									{
+										results.put("secondsUntilFound", (int) ((double) (System.currentTimeMillis() - startTimestamp) / 1000));
+										final Classifier c = factory.getComponentInstantiation(ci);
 
-													/* Validate the classifier */
-													evalStart = System.currentTimeMillis();
-													final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
+										/* Validate the classifier */
+										evalStart = System.currentTimeMillis();
+										final ClusteringResult valRes = ClusteringEvaluation.evaluateModel(c, data, internalMeasure);
 
-													results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart));
-													if (valRes.isResultValid()) {
-														results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
+										results.put("valTrainTime", (double) (System.currentTimeMillis() - evalStart) / 1000);
+										if (!((Double) valRes.getInternalEvaluationResult()).isInfinite() && !((Double) valRes.getInternalEvaluationResult()).isNaN()) {
+											results.put("internalMeasureResult", valRes.getInternalEvaluationResult());
 
-													} else {
-														results.put("internalMeasureResult", 1000.0);//Double.MAX_VALUE); //maximal loss if invalid
-
-													}
-													results.put("externalMeasureResult", valRes.getExternalEvaluationResult());
-													results.put("n_clusters", valRes.getN_clusters());
-												}
-
-												results.put("exception", "");
-											} catch (final Exception e) {
-												e.printStackTrace();
-												final StringBuilder stackTraceBuilder = new StringBuilder();
-												for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
-													stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
-												}
-												results.put("exception", stackTraceBuilder.toString());
-											} finally {
-												candidateTimeoutTask.cancel();
-											}
-											try {
-												results.put("done", 1);
-												adapter.insert(CONFIG.resultsTable(), results);
-												if (bestResult.size() == 0 || (double) results.get("internalMeasureResult") < (double) bestResult.get("internalMeasureResult")) {
-													bestResult.clear();
-													bestResult.putAll(results);
-												}
-												results.remove("componentInstance");
-												MlplanClusterSearch.this.L.info("Results collected " + results);
-											} catch (final SQLException e) {
-												e.printStackTrace();
-											}
+										} else {
+											results.put("internalMeasureResult", Double.MAX_VALUE); //maximal loss if invalid
 
 										}
-									} catch (final Throwable e) {
-										e.printStackTrace();
+										results.put("externalMeasureResult", valRes.getExternalEvaluationResult());
+										results.put("n_clusters", valRes.getN_clusters());
 									}
+
+									results.put("exception", "");
+								} catch (final Exception e) {
+									e.printStackTrace();
+									final StringBuilder stackTraceBuilder = new StringBuilder();
+									for (final Throwable ex : ExceptionUtils.getThrowables(e)) {
+										stackTraceBuilder.append(ExceptionUtils.getStackTrace(ex) + "\n");
+									}
+									results.put("exception", stackTraceBuilder.toString());
+								} finally {
+									candidateTimeoutTask.cancel();
 								}
-							});
+								try {
+									results.put("done", 1);
+									adapter.insert(CONFIG.resultsTable(), results);
+									if (bestResult.size() == 0 || (double) results.get("internalMeasureResult") < (double) bestResult.get("internalMeasureResult")) {
+										bestResult.clear();
+										bestResult.putAll(results);
+									}
+									results.remove("componentInstance");
+									MlplanClusterSearch.this.L.info("Results collected " + results);
+								} catch (final SQLException e) {
+									e.printStackTrace();
+								}
+
+							}
+						} catch (final Throwable e) {
+							e.printStackTrace();
 						}
+
 						break;
 				}
 			}
@@ -525,10 +530,48 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	}
 
 	public static void main(final String[] args) throws ExperimentDBInteractionFailedException, IllegalExperimentSetupException {
-		//CONFIG.setProperty("internalClusterValidationMeasure", "DensityBased");
+		final int numExperiments = 10000;
 		CONFIG.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
-		final ExperimentRunner runner = new ExperimentRunner(CONFIG, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));//, 1);
-		runner.randomlyConductExperiments(10000, false);
+		final int numThreads = 20;
+		final ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+		final ArrayList<Future> futures = new ArrayList<>();
+		for (int i = 0; i < numThreads; i++) {
+			final int index = i;
+			futures.add(executor.submit(new Runnable() {
+				@Override
+				public void run() {
+					//is the config thread safe? does it  have to? creating a new one for each thread for now
+					final IAutoMLForClusteringExperimentConfig config = ConfigFactory.create(IAutoMLForClusteringExperimentConfig.class);
+					config.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
+					try {
+						Thread.sleep(index * 100);
+					} catch (final InterruptedException e) {
+						e.printStackTrace();
+					}
+					final ExperimentRunner runner = new ExperimentRunner(config, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));//, 1);
+					for (int j = 0; j < numExperiments / numThreads; j++) {
+						try {
+							runner.randomlyConductExperiments(1, false);
+						} catch (final ExperimentDBInteractionFailedException e) {
+							e.printStackTrace();
+						} catch (final IllegalExperimentSetupException e) {
+							e.printStackTrace();
+						}
+					}
+
+				}
+			}));
+		}
+		for (int i = 0; i < futures.size(); i++) {
+			try {
+				futures.get(i).get();
+			} catch (final InterruptedException e) {
+				e.printStackTrace();
+			} catch (final ExecutionException e) {
+				e.printStackTrace();
+			}
+		}
+
 	}
 
 }

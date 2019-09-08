@@ -18,7 +18,13 @@ public abstract class AInternalClusteringValidationMeasure implements IInternalC
 
 	@Override
 	public Double calculateMeasure(final Instances labeled, final Instances nul) {
-		return calculateMeasureAndCentroids(ClusterUtil.separateClusters(labeled));
+		final List<List<double[]>> clusters = ClusterUtil.separateClusters(labeled);
+		final double measureResult = calculateMeasureAndCentroids(clusters);
+		
+		if (clusters.size() == labeled.size() || clusters.size() == 0 || clusters.size() == 1) {
+			return Double.MAX_VALUE;
+		}
+		return measureResult;
 	}
 
 	@Override

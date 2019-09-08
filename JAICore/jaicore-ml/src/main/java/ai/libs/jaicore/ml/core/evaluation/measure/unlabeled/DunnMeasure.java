@@ -34,7 +34,7 @@ public class DunnMeasure extends AInternalClusteringValidationMeasure {
 
 		double min_d = Double.MAX_VALUE;
 		for (int i = 0; i < c; i++) {
-			for (int j = 0; j <= i; j++) {
+			for (int j = 0; j < c; j++) {
 				final double cur_d = d5(clusters, centroids, i, j);
 				if (cur_d > 0 && cur_d < min_d) {
 					min_d = cur_d;

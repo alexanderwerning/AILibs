@@ -31,7 +31,11 @@ public class SilhouetteMeasure extends AInternalClusteringValidationMeasure {
 				}
 			}
 		}
-		return -sum / size;
+		Double result = -sum / size;
+		if (result.isInfinite() || result.isNaN()) {
+			result = Double.MAX_VALUE;
+		}
+		return result;
 	}
 
 	private double distancePointToCluster(final List<double[]> cluster, final double[] point) {

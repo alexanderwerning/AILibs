@@ -6,8 +6,8 @@ public class VanDongenMeasure extends AExternalClusteringValidationMeasure {
 
 	@Override
 	public Double calculateExternalMeasure(final List<Double> actual, final List<Double> expected, final int[][] contingencyMatrix) {
-		final double n = 2 * actual.size();
-		double result = n;
+		final double twoN = 2 * actual.size();
+		double result = twoN;
 		for (int i = 0; i < contingencyMatrix.length; i++) {
 			double maxi = 0;
 			for (int j = 0; j < contingencyMatrix[0].length; j++) {
@@ -26,6 +26,28 @@ public class VanDongenMeasure extends AExternalClusteringValidationMeasure {
 			}
 			result -= maxj;
 		}
-		return result / (n);
+		int largestClusterI = 0;
+		for (int i = 0; i < contingencyMatrix.length; i++) {
+			int clusterSize = 0;
+			for (int j = 0; j < contingencyMatrix[0].length; j++) {
+				clusterSize += contingencyMatrix[i][j];
+			}
+			if (clusterSize > largestClusterI) {
+				largestClusterI = clusterSize;
+			}
+		}
+
+		int largestClusterJ = 0;
+		for (int j = 0; j < contingencyMatrix[0].length; j++) {
+			int clusterSize = 0;
+			for (int i = 0; i < contingencyMatrix.length; i++) {
+				clusterSize += contingencyMatrix[i][j];
+			}
+			if (clusterSize > largestClusterJ) {
+				largestClusterJ = clusterSize;
+			}
+		}
+		// will never divide by zero, as actual clusters are more than one
+		return result / (twoN - largestClusterI - largestClusterJ);
 	}
 }

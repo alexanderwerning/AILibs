@@ -12,7 +12,6 @@ public class DaviesBouldinMeasure extends AInternalClusteringValidationMeasure {
 	 */
 	@Override
 	public Double calculateMeasure(final List<List<double[]>> clusters, final List<double[]> centroids, final boolean erasure) {
-		System.out.println("number of clusters: " + clusters.size());
 		final int N = clusters.size();
 
 		double sum = 0;

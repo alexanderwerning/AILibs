@@ -20,7 +20,7 @@ public class MLPlanSKLearnClusterBuilder extends MLPlanSKLearnBuilder {
 	/* DEFAULT VALUES FOR THE SCIKIT-LEARN SETTING */
 	private static final String RES_SKLEARN_SEARCHSPACE_CONFIG = "automl/searchmodels/sklearn/sklearn-cluster-mlplan.json";
 	private static final String RES_SKLEARN_UL_SEARCHSPACE_CONFIG = RES_SKLEARN_SEARCHSPACE_CONFIG;//"automl/searchmodels/sklearn/ml-plan-ul.json";
-	private static final String FS_SEARCH_SPACE_CONFIG = "conf/mlplan-sklearn.json";
+	private static final String FS_SEARCH_SPACE_CONFIG = "conf/sklearn-cluster-mlplan.json";
 
 	private static final String RES_SKLEARN_PREFERRED_COMPONENTS = "mlplan/sklearn-preferenceList.txt";
 	private static final String FS_SKLEARN_PREFERRED_COMPONENTS = "conf/sklearn-preferenceList.txt";

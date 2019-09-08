@@ -199,6 +199,13 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 					throw new AlgorithmTimeoutedException(getRemainingTimeToDeadline().milliseconds() * -1);
 				}
 
+				//TODO this returns the best result after the search phase. When the selection portion is 0, maybe TwoPhaseHASCO should return a HASCO object (or a common superclass)?
+				if (1 == 1) {
+					final Optional<HASCOSolutionCandidate<Double>> bestSolutionOptional = this.phase1ResultQueue.stream().min((s1, s2) -> s1.getScore().compareTo(s2.getScore()));
+					final HASCOSolutionCandidate<Double> bestSolution = bestSolutionOptional.get();
+					this.selectedHASCOSolution = bestSolution;
+				}
+
 				/* phase 2: select model */
 				final IObjectEvaluator<?, Double> selectionBenchmark = getInput().getSelectionBenchmark();
 				if (this.logger.isInfoEnabled()) {
@@ -336,11 +343,6 @@ public class TwoPhaseHASCO<S extends GraphSearchInput<N, A>, N, A> extends Softw
 		}
 		final HASCOSolutionCandidate<Double> bestSolution = bestSolutionOptional.get();
 		final double scoreOfBestSolution = bestSolution.getScore();
-
-		//TODO
-		if (1 == 1) {
-			return bestSolution;
-		}
 
 		/* determine the models from which we want to select */
 		this.logger.info("Starting with phase 2: Selection of final model among the {} solutions that were identified.", this.phase1ResultQueue.size());

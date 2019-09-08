@@ -1,6 +1,7 @@
 package ai.libs.jaicore.ml.scikitwrapper;
 
 import ai.libs.jaicore.basic.FileUtil;
+import ai.libs.jaicore.basic.ResourceFile;
 import ai.libs.jaicore.basic.ResourceUtil;
 import ai.libs.jaicore.ml.evaluation.IInstancesClassifier;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,11 +69,14 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 	private static final File TMP_FOLDER = new File("tmp"); // Folder to put the serialized arff files and the scripts in.
 
 	private static final String RES_SCIKIT_TEMPLATE_PATH = "sklearn/scikit_template.twig.py";
-	private static final File SCIKIT_TEMPLATE = new File(ResourceUtil.getResourceAsTempFile(RES_SCIKIT_TEMPLATE_PATH)); // Path to the used python template.
+	private static final String FS_SCIKIT_TEMPLATE_PATH = "conf/scikit_template.twig.py";
+	private static final File SCIKIT_TEMPLATE = FileUtil.getExistingFileWithHighestPriority(RES_SCIKIT_TEMPLATE_PATH,
+		FS_SCIKIT_TEMPLATE_PATH);
+	// Path to the used python template.
 
 	private static final File MODEL_DUMPS_DIRECTORY = new File(TMP_FOLDER, "model_dumps");
 	private static final boolean VERBOSE = false; // If true the output stream of the python process is printed.
-	private static final boolean DELETE_TEMPORARY_FILES_ON_EXIT = false; //TODO change back to true;
+	private static final boolean DELETE_TEMPORARY_FILES_ON_EXIT = true;
 
 	/* The type of problem that is to be solved by the ScikitLearn classifier. */
 	public enum ProblemType {
@@ -126,7 +130,13 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 		}
 
 		/* Prepare SKLearn Script template with the placeholder values */
-		final JtwigTemplate template = JtwigTemplate.fileTemplate(SCIKIT_TEMPLATE);
+		final String templateString;
+		if (SCIKIT_TEMPLATE instanceof ResourceFile) {
+			templateString = ResourceUtil.readResourceFileToString(((ResourceFile) SCIKIT_TEMPLATE).getPathName());
+		} else {
+			templateString = FileUtil.readFileAsString(SCIKIT_TEMPLATE);
+		}
+		final JtwigTemplate template = JtwigTemplate.inlineTemplate(templateString);
 		final JtwigModel model = JtwigModel.newModel(templateValues);
 		template.render(model, new FileOutputStream(scriptFile));
 	}
@@ -238,6 +248,7 @@ public class ScikitLearnWrapper implements IInstancesClassifier, Classifier {
 			fileContent = FileUtil.readFileAsString(outputFile);
 			if (DELETE_TEMPORARY_FILES_ON_EXIT) {
 				outputFile.delete();
+				testArff.delete(); // TODO unlabeled data is never reused, the hashcode changes
 			}
 			final ObjectMapper objMapper = new ObjectMapper();
 			this.rawLastClassificationResults = objMapper.readValue(fileContent, List.class);

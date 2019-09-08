@@ -56,10 +56,6 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -91,16 +87,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	@Override
 	public void evaluate(final ExperimentDBEntry experimentEntry, final IExperimentIntermediateResultProcessor processor) throws ExperimentEvaluationFailedException {
 		try {
-			// empty tmp folder to avoid overflow, this might not be necessary if the unlabeled data would be cached once and then read
-			/*final File tmpFolder = new File("tmp");
-			if (tmpFolder.exists()) {
-				for (final String filename : tmpFolder.list()) {
-					final File file = new File(filename);
-					if (!file.isDirectory()) {
-						file.delete();
-					}
-				}
-			}*/
 			this.L.info("ExperimentEntry: " + experimentEntry);
 			final Experiment experiment = experimentEntry.getExperiment();
 			this.L.info("Conduct experiment " + experiment);
@@ -226,6 +212,7 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 							builder.withCandidateEvaluationTimeOut(new TimeOut(Long.parseLong(experimentDescription.get("candTimeout")), TimeUnit.SECONDS));
 							builder.withNumCpus(experimentEntry.getExperiment().getNumCPUs());
 
+							// TODO reading the files creates error on pc2, but it would not change any values for given datasets anyway
 							//final File createdFile = getSearchSpaceConfigFile(componentsProvidingInterface, loader.getParamConfigs());
 							//builder.withSearchSpaceConfigFile(createdFile);
 
@@ -448,7 +435,6 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 		final String filename = "searchSpace" + components.hashCode() + ".json";
 
 		final File outputFile = new File(TMP_FOLDER, filename);
-		/* If Instances with the same Instance (given the hash is collision resistant) is already serialized, there is no need for doing it once more. */
 		if (outputFile.exists()) {
 			this.L.debug("Reusing {}", outputFile);
 			return outputFile;
@@ -530,47 +516,10 @@ public class MlplanClusterSearch implements IExperimentSetEvaluator {
 	}
 
 	public static void main(final String[] args) throws ExperimentDBInteractionFailedException, IllegalExperimentSetupException {
-		final int numExperiments = 10000;
-		CONFIG.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
-		final int numThreads = 20;
-		final ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-		final ArrayList<Future> futures = new ArrayList<>();
-		for (int i = 0; i < numThreads; i++) {
-			final int index = i;
-			futures.add(executor.submit(new Runnable() {
-				@Override
-				public void run() {
-					//is the config thread safe? does it  have to? creating a new one for each thread for now
-					final IAutoMLForClusteringExperimentConfig config = ConfigFactory.create(IAutoMLForClusteringExperimentConfig.class);
-					config.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
-					try {
-						Thread.sleep(index * 100);
-					} catch (final InterruptedException e) {
-						e.printStackTrace();
-					}
-					final ExperimentRunner runner = new ExperimentRunner(config, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));//, 1);
-					for (int j = 0; j < numExperiments / numThreads; j++) {
-						try {
-							runner.randomlyConductExperiments(1, false);
-						} catch (final ExperimentDBInteractionFailedException e) {
-							e.printStackTrace();
-						} catch (final IllegalExperimentSetupException e) {
-							e.printStackTrace();
-						}
-					}
 
-				}
-			}));
-		}
-		for (int i = 0; i < futures.size(); i++) {
-			try {
-				futures.get(i).get();
-			} catch (final InterruptedException e) {
-				e.printStackTrace();
-			} catch (final ExecutionException e) {
-				e.printStackTrace();
-			}
-		}
+		CONFIG.setProperty("dataset", Arrays.stream(CONFIG.datasetDirectory().list()).filter(x -> x.endsWith(".arff")).collect(Collectors.joining(",")));
+		final ExperimentRunner runner = new ExperimentRunner(CONFIG, new MlplanClusterSearch(), new ExperimenterSQLHandle(CONFIG));
+		runner.randomlyConductExperiments(1, false);
 
 	}
 

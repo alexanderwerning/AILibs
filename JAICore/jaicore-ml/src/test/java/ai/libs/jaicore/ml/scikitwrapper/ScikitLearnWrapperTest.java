@@ -4,17 +4,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import ai.libs.jaicore.ml.WekaUtil;
+import ai.libs.jaicore.ml.openml.OpenMLHelper;
+import ai.libs.jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-
 import org.junit.Test;
-
-import ai.libs.jaicore.ml.WekaUtil;
-import ai.libs.jaicore.ml.scikitwrapper.ScikitLearnWrapper.ProblemType;
+import weka.core.Attribute;
+import weka.core.DenseInstance;
+import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.converters.ArffLoader.ArffReader;
 
@@ -22,7 +27,6 @@ import weka.core.converters.ArffLoader.ArffReader;
  * REQUIREMENTS: python 3.6.4 + scikit-learn 0.20.0 need to be installed in order to run these tests.
  *
  * @author Marcel
- *
  */
 public class ScikitLearnWrapperTest {
 
@@ -40,8 +44,8 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void buildClassifierRegression() throws Exception {
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("LinearRegression()", "from sklearn.linear_model import LinearRegression");
-		Instances dataset = this.loadARFF(REGRESSION_ARFF);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("LinearRegression()", "from sklearn.linear_model import LinearRegression");
+		final Instances dataset = this.loadARFF(REGRESSION_ARFF);
 		slw.setProblemType(ProblemType.REGRESSION);
 		slw.buildClassifier(dataset);
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -50,27 +54,27 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void buildAndPredict() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.ensemble");
-		String constructInstruction = "sklearn.ensemble.RandomForestClassifier(n_estimators=100)";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports), false);
-		Instances dataset = this.loadARFF(CLASSIFICATION_ARFF);
-		List<Instances> stratifiedSplit = WekaUtil.getStratifiedSplit(dataset, 0, .7);
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.ensemble");
+		final String constructInstruction = "sklearn.ensemble.RandomForestClassifier(n_estimators=100)";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports), false);
+		final Instances dataset = this.loadARFF(CLASSIFICATION_ARFF);
+		final List<Instances> stratifiedSplit = WekaUtil.getStratifiedSplit(dataset, 0, .7);
 
-		long startTrain = System.currentTimeMillis();
+		final long startTrain = System.currentTimeMillis();
 		slw.buildClassifier(stratifiedSplit.get(0));
 		System.out.println("Build took: " + (System.currentTimeMillis() - startTrain));
 
-		long startVal = System.currentTimeMillis();
+		final long startVal = System.currentTimeMillis();
 		slw.classifyInstances(stratifiedSplit.get(1));
 		System.out.println("Validation took: " + (System.currentTimeMillis() - startVal));
 	}
 
 	@Test
 	public void buildClassifierRegressionMultitarget() throws Exception {
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor(activation='logistic')", "from sklearn.neural_network import MLPRegressor");
-		Instances dataset = this.loadARFF(REGRESSION_ARFF);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor(activation='logistic')", "from sklearn.neural_network import MLPRegressor");
+		final Instances dataset = this.loadARFF(REGRESSION_ARFF);
 		slw.setProblemType(ProblemType.REGRESSION);
-		int s = dataset.numAttributes();
+		final int s = dataset.numAttributes();
 		slw.setTargets(s - 1, s - 2, s - 3);
 		slw.buildClassifier(dataset);
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -79,34 +83,34 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void trainAndTestClassifierRegressionMultitarget() throws Exception {
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
-		Instances datasetTrain = this.loadARFF(BAYESNET_TRAIN_ARFF);
-		Instances datasetTest = datasetTrain;
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
+		final Instances datasetTrain = this.loadARFF(BAYESNET_TRAIN_ARFF);
+		final Instances datasetTest = datasetTrain;
 		slw.setProblemType(ProblemType.REGRESSION);
-		int s = datasetTrain.numAttributes();
-		int[] targetColumns = { s - 1, s - 2, s - 3 };
+		final int s = datasetTrain.numAttributes();
+		final int[] targetColumns = {s - 1, s - 2, s - 3};
 		slw.setTargets(targetColumns);
 		slw.buildClassifier(datasetTrain);
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, targetColumns.length * datasetTest.size());
 	}
 
 	@Test
 	public void testClassifierRegression() throws Exception {
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
-		Instances datasetTest = this.loadARFF(BAYESNET_TRAIN_ARFF);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
+		final Instances datasetTest = this.loadARFF(BAYESNET_TRAIN_ARFF);
 		slw.setModelPath(new File(MLP_REGRESSOR_DUMP).getAbsoluteFile());
 		slw.setProblemType(ProblemType.REGRESSION);
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, datasetTest.size());
 	}
 
 	@Test
 	public void trainClassifierCategorical() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
-		Instances dataset = this.loadARFF(CLASSIFICATION_ARFF);
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final Instances dataset = this.loadARFF(CLASSIFICATION_ARFF);
 		slw.buildClassifier(dataset);
 		System.out.println(slw.getModelPath());
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -115,34 +119,34 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void trainAndTestClassifierCategorical() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
-		Instances datasetTrain = this.loadARFF(CLASSIFICATION_ARFF);
-		Instances datasetTest = datasetTrain;
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final Instances datasetTrain = this.loadARFF(CLASSIFICATION_ARFF);
+		final Instances datasetTest = datasetTrain;
 		slw.buildClassifier(datasetTrain);
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, datasetTest.size());
 	}
 
 	@Test
 	public void testClassifierCategorical() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
-		Instances datasetTest = this.loadARFF(CLASSIFICATION_ARFF);
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.ensemble");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.ensemble.RandomForestClassifier(n_estimators=100))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final Instances datasetTest = this.loadARFF(CLASSIFICATION_ARFF);
 		slw.setModelPath(new File(CLASSIFIER_DUMP).getAbsoluteFile());
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, datasetTest.size());
 	}
 
 	@Test
 	public void trainClassifierClustering() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
 		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
-		Instances dataset = this.loadARFF(REGRESSION_ARFF);
+		final Instances dataset = this.loadARFF(REGRESSION_ARFF);
 		slw.buildClassifier(dataset);
 		System.out.println(slw.getModelPath());
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -151,36 +155,36 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void trainAndTestClassifierClustering() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
 		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
-		Instances datasetTrain = this.loadARFF(REGRESSION_ARFF);
-		Instances datasetTest = datasetTrain;
+		final Instances datasetTrain = this.loadARFF(REGRESSION_ARFF);
+		final Instances datasetTest = datasetTrain;
 		slw.buildClassifier(datasetTrain);
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, datasetTest.size());
 	}
 
 	@Test
 	public void testClassifierClustering() throws Exception {
-		List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
-		String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
-		ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		final List<String> imports = Arrays.asList("sklearn", "sklearn.pipeline", "sklearn.decomposition", "sklearn.cluster");
+		final String constructInstruction = "sklearn.pipeline.make_pipeline(sklearn.pipeline.make_union(sklearn.decomposition.PCA(),sklearn.decomposition.FastICA()),sklearn.cluster.KMeans(n_clusters=3, random_state=0))";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
 		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
-		Instances datasetTest = this.loadARFF(REGRESSION_ARFF);
+		final Instances datasetTest = this.loadARFF(REGRESSION_ARFF);
 		slw.setModelPath(new File(CLUSTERING_DUMP).getAbsoluteFile());
-		double[] result = slw.classifyInstances(datasetTest);
+		final double[] result = slw.classifyInstances(datasetTest);
 		assertEquals("Unequal length of predictions and number of test instances", result.length, datasetTest.size());
 	}
 
 	@Test
 	public void getRawOutput() throws Exception {
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
-		Instances datasetTrain = this.loadARFF(BAYESNET_TRAIN_ARFF);
-		Instances datasetTest = this.loadARFF(BAYESNET_TRAIN_ARFF);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("MLPRegressor()", "from sklearn.neural_network import MLPRegressor");
+		final Instances datasetTrain = this.loadARFF(BAYESNET_TRAIN_ARFF);
+		final Instances datasetTest = this.loadARFF(BAYESNET_TRAIN_ARFF);
 		slw.setProblemType(ProblemType.REGRESSION);
-		int s = datasetTrain.numAttributes();
+		final int s = datasetTrain.numAttributes();
 		slw.setTargets(s - 1, s - 2, s - 3);
 		slw.buildClassifier(datasetTrain);
 		slw.classifyInstances(datasetTest);
@@ -190,12 +194,12 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void loadOwnClassifierFromFileWithNamespace() throws Exception {
-		File importfolder = new File(IMPORT_FOLDER);
-		String importStatement = ScikitLearnWrapper.createImportStatementFromImportFolder(importfolder, true);
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("test_module_1.My_MLPRegressor()", importStatement);
-		Instances dataset = this.loadARFF(REGRESSION_ARFF);
+		final File importfolder = new File(IMPORT_FOLDER);
+		final String importStatement = ScikitLearnWrapper.createImportStatementFromImportFolder(importfolder, true);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("test_module_1.My_MLPRegressor()", importStatement);
+		final Instances dataset = this.loadARFF(REGRESSION_ARFF);
 		slw.setProblemType(ProblemType.REGRESSION);
-		int s = dataset.numAttributes();
+		final int s = dataset.numAttributes();
 		slw.setTargets(s - 1, s - 2, s - 3);
 		slw.buildClassifier(dataset);
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -204,12 +208,12 @@ public class ScikitLearnWrapperTest {
 
 	@Test
 	public void loadOwnClassifierFromFileWithoutNamespace() throws Exception {
-		File importfolder = new File(IMPORT_FOLDER);
-		String importStatement = ScikitLearnWrapper.createImportStatementFromImportFolder(importfolder, false);
-		ScikitLearnWrapper slw = new ScikitLearnWrapper("My_MLPRegressor()", importStatement);
-		Instances dataset = this.loadARFF(OWN_CLASSIFIER_DUMP);
+		final File importfolder = new File(IMPORT_FOLDER);
+		final String importStatement = ScikitLearnWrapper.createImportStatementFromImportFolder(importfolder, false);
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper("My_MLPRegressor()", importStatement);
+		final Instances dataset = this.loadARFF(OWN_CLASSIFIER_DUMP);
 		slw.setProblemType(ProblemType.REGRESSION);
-		int s = dataset.numAttributes();
+		final int s = dataset.numAttributes();
 		slw.setTargets(s - 1, s - 2, s - 3);
 		slw.buildClassifier(dataset);
 		assertNotNull(MSG_MODELPATH_NOT_NULL, slw.getModelPath());
@@ -221,7 +225,7 @@ public class ScikitLearnWrapperTest {
 		boolean errorTriggeredFlag = false;
 		try {
 			new ScikitLearnWrapper(null, "");
-		} catch (AssertionError e) {
+		} catch (final AssertionError e) {
 			errorTriggeredFlag = true;
 		}
 		assertTrue(errorTriggeredFlag);
@@ -232,17 +236,58 @@ public class ScikitLearnWrapperTest {
 		boolean errorTriggeredFlag = false;
 		try {
 			new ScikitLearnWrapper("", "");
-		} catch (AssertionError e) {
+		} catch (final AssertionError e) {
 			errorTriggeredFlag = true;
 		}
 		assertTrue(errorTriggeredFlag);
 	}
 
 	private Instances loadARFF(final String arffPath) throws IOException {
-		BufferedReader reader = new BufferedReader(new FileReader(arffPath));
-		ArffReader arff = new ArffReader(reader);
-		Instances data = arff.getData();
+		final BufferedReader reader = new BufferedReader(new FileReader(arffPath));
+		final ArffReader arff = new ArffReader(reader);
+		final Instances data = arff.getData();
 		data.setClassIndex(data.numAttributes() - 1);
 		return data;
+	}
+
+	@Test
+	public void kmeansTest() throws Exception {
+		final List<String> imports = Arrays.asList("sklearn.cluster");
+		final String constructInstruction = "sklearn.cluster.KMeans(n_clusters=3, random_state=0)";
+		final ScikitLearnWrapper slw = new ScikitLearnWrapper(constructInstruction, ScikitLearnWrapper.getImportString(imports));
+		slw.setProblemType(ScikitLearnWrapper.ProblemType.CLUSTERING);
+
+		final Instances labeledData = OpenMLHelper.getInstancesById(61);//this.loadARFF(REGRESSION_ARFF);
+		//strip labels
+		final ArrayList<Attribute> atts = Collections.list(labeledData.enumerateAttributes());
+		final Instances unlabeledData = new Instances("data", atts, labeledData.size());
+
+		labeledData.setClassIndex(labeledData.numAttributes() - 1);
+		for (final Instance instance :
+			labeledData) {
+			final double[] values = new double[atts.size()];
+			for (int i = 0; i < values.length; i++) {
+
+				values[i] = instance.value(i);
+
+			}
+			final Instance newInstance = new DenseInstance(1, values);
+			unlabeledData.add(newInstance);
+			newInstance.setDataset(unlabeledData);
+		}
+		unlabeledData.setClassIndex(-1);//ignored, but needed for mlplan
+
+		slw.buildClassifier(unlabeledData);
+		final double[] result = slw.classifyInstances(unlabeledData);
+		final HashMap<Double, Integer> classes = new HashMap<>();
+		for (final double label : result
+		) {
+			if (classes.containsKey(label)) {
+				classes.put(label, classes.get(label) + 1);
+			} else {
+				classes.put(label, 1);
+			}
+		}
+		assertEquals("Unequal length of predictions and number of test instances", 3, classes.size());
 	}
 }
